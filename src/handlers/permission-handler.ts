@@ -16,6 +16,31 @@ export interface PermissionHandlerDeps {
   cwd: string;
 }
 
+/** 無需使用者審批、直接放行的工具名稱 */
+const AUTO_APPROVE_TOOLS = new Set(['Skill', 'Task']);
+
+/** Bash 指令自動放行的 pattern（唯讀或網路請求類） */
+const AUTO_APPROVE_BASH_PATTERNS = [
+  /^\s*curl\b/,
+  /^\s*wget\b/,
+];
+
+/**
+ * 判斷是否自動核准此工具呼叫，不需要 Discord 審批
+ */
+function shouldAutoApprove(toolName: string, input: unknown): boolean {
+  if (AUTO_APPROVE_TOOLS.has(toolName)) return true;
+
+  if (toolName === 'Bash') {
+    const command = (input as Record<string, unknown>)?.command;
+    if (typeof command === 'string') {
+      return AUTO_APPROVE_BASH_PATTERNS.some((p) => p.test(command));
+    }
+  }
+
+  return false;
+}
+
 /**
  * 建立 canUseTool callback，將 SDK 權限請求橋接到 Discord 按鈕
  *
@@ -28,6 +53,12 @@ export interface PermissionHandlerDeps {
 export function createCanUseTool(deps: PermissionHandlerDeps): CanUseTool {
   return async (toolName, input, options) => {
     const { store, threadId, thread, cwd } = deps;
+
+    // 自動放行：Skill、Task 及 curl/wget 等指令，不送 Discord 審批
+    if (shouldAutoApprove(toolName, input)) {
+      log.info({ threadId, tool: toolName }, '自動核准');
+      return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
+    }
 
     log.info({ threadId, tool: toolName }, '等待權限審批');
 

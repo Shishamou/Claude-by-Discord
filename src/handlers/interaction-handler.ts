@@ -86,12 +86,14 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
           return;
         }
 
+        // 先回應互動（Discord 3 秒視窗），再 resolve Promise，
+        // 避免 SDK microtask flood 佔住 event loop 導致互動逾時
+        await interaction.reply({ content: '✅ 已核准', flags: [MessageFlags.Ephemeral] });
+
         deps.store.resolvePendingApproval(threadId, {
           behavior: 'allow',
           updatedInput: pending.toolInput,
         });
-
-        await interaction.reply({ content: '✅ 已核准', flags: [MessageFlags.Ephemeral] });
         return;
       }
 
@@ -104,12 +106,13 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
           return;
         }
 
+        // 先回應互動（Discord 3 秒視窗），再 resolve Promise
+        await interaction.reply({ content: '❌ 已拒絕', flags: [MessageFlags.Ephemeral] });
+
         deps.store.resolvePendingApproval(threadId, {
           behavior: 'deny',
           message: '使用者透過按鈕拒絕',
         });
-
-        await interaction.reply({ content: '❌ 已拒絕', flags: [MessageFlags.Ephemeral] });
         return;
       }
 
