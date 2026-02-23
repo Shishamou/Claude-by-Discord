@@ -17,6 +17,7 @@ import { createCanUseTool } from './handlers/permission-handler.js';
 import { buildErrorEmbed, buildWaitingInputEmbed, buildOrphanCleanupEmbed } from './modules/embeds.js';
 import { sendInThread } from './effects/discord-sender.js';
 import { createThreadMessageHandler } from './handlers/thread-message-handler.js';
+import { createMentionHandler } from './handlers/mention-handler.js';
 import { UsageStore } from './effects/usage-store.js';
 import { checkClaudeStatus } from './effects/startup-check.js';
 
@@ -150,8 +151,19 @@ async function main() {
     startClaudeQuery,
   });
 
+  // 建立 @mention 處理器（在頻道 @ Bot 自動以 Haiku 開啟對話）
+  const mentionHandler = createMentionHandler({
+    config,
+    store,
+    get client() {
+      return client;
+    },
+    startClaudeQuery,
+  });
+
   // 啟動 Discord Client
   client = await createDiscordClient(config, handler, async (message) => {
+    await mentionHandler(message);
     await threadMessageHandler(message);
   });
 

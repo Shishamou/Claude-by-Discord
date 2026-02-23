@@ -53,7 +53,7 @@ export function classifyAttachment(contentType: string | null, filename: string)
 /**
  * 從 Discord 訊息中下載檔案附件
  */
-async function downloadAttachments(message: Message): Promise<FileAttachment[]> {
+export async function downloadAttachments(message: Message): Promise<FileAttachment[]> {
   const files: FileAttachment[] = [];
 
   for (const [, attachment] of message.attachments) {
