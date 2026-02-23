@@ -81,15 +81,13 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
         const threadId = customId.slice('approve:'.length);
         const pending = deps.store.getPendingApproval(threadId);
 
+        // discord-client.ts 已預先 deferReply，直接 editReply
         if (!pending) {
-          await interaction.reply({ content: '⚠️ 此請求已過期', flags: [MessageFlags.Ephemeral] });
+          await interaction.editReply({ content: '⚠️ 此請求已過期' });
           return;
         }
 
-        // 先回應互動（Discord 3 秒視窗），再 resolve Promise，
-        // 避免 SDK microtask flood 佔住 event loop 導致互動逾時
-        await interaction.reply({ content: '✅ 已核准', flags: [MessageFlags.Ephemeral] });
-
+        await interaction.editReply({ content: '✅ 已核准' });
         deps.store.resolvePendingApproval(threadId, {
           behavior: 'allow',
           updatedInput: pending.toolInput,
@@ -101,14 +99,13 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
         const threadId = customId.slice('deny:'.length);
         const pending = deps.store.getPendingApproval(threadId);
 
+        // discord-client.ts 已預先 deferReply，直接 editReply
         if (!pending) {
-          await interaction.reply({ content: '⚠️ 此請求已過期', flags: [MessageFlags.Ephemeral] });
+          await interaction.editReply({ content: '⚠️ 此請求已過期' });
           return;
         }
 
-        // 先回應互動（Discord 3 秒視窗），再 resolve Promise
-        await interaction.reply({ content: '❌ 已拒絕', flags: [MessageFlags.Ephemeral] });
-
+        await interaction.editReply({ content: '❌ 已拒絕' });
         deps.store.resolvePendingApproval(threadId, {
           behavior: 'deny',
           message: '使用者透過按鈕拒絕',
@@ -116,24 +113,24 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
         return;
       }
 
-      // 確認中斷
+      // 確認中斷（discord-client.ts 已預先 deferReply）
       if (customId.startsWith('confirm_stop:')) {
         const threadId = customId.slice('confirm_stop:'.length);
         const session = deps.store.getSession(threadId);
 
         if (!session) {
-          await interaction.reply({ content: '⚠️ 此任務已結束', flags: [MessageFlags.Ephemeral] });
+          await interaction.editReply({ content: '⚠️ 此任務已結束' });
           return;
         }
 
-        await interaction.reply({ content: '🛑 任務已中斷', flags: [MessageFlags.Ephemeral] });
+        await interaction.editReply({ content: '🛑 任務已中斷' });
         await stopCmd.executeStop(threadId, deps.store, deps.client);
         return;
       }
 
-      // 取消中斷
+      // 取消中斷（discord-client.ts 已預先 deferReply）
       if (customId.startsWith('cancel_stop:')) {
-        await interaction.reply({ content: '✅ 已取消中斷', flags: [MessageFlags.Ephemeral] });
+        await interaction.editReply({ content: '✅ 已取消中斷' });
         return;
       }
 

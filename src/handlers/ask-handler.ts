@@ -1,4 +1,4 @@
-import { MessageFlags, type ButtonInteraction, type ModalSubmitInteraction } from 'discord.js';
+import { type ButtonInteraction, type ModalSubmitInteraction } from 'discord.js';
 import type { AskState, PendingApproval } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import { buildAskQuestionStepEmbed, buildAskCompletedEmbed } from '../modules/embeds.js';
@@ -14,6 +14,7 @@ export interface AskHandlerDeps {
 
 /**
  * 前進到下一題或完成所有問題
+ * discord-client.ts 已預先 defer，統一使用 editReply
  */
 async function advanceOrFinalize(
   threadId: string,
@@ -25,26 +26,10 @@ async function advanceOrFinalize(
   const nextIdx = askState.currentQuestionIndex + 1;
 
   if (nextIdx >= askState.totalQuestions) {
-    // 所有問題已回答 → resolve
     const toolInput = pending.toolInput as Record<string, unknown>;
     const summaryEmbed = buildAskCompletedEmbed(askState);
 
-    if (interaction.isButton()) {
-      await interaction.update({ embeds: [summaryEmbed], components: [] });
-    } else {
-      // Modal 提交：回覆 modal，再編輯原訊息
-      const lastAnswer = askState.collectedAnswers[String(askState.currentQuestionIndex)] || '';
-      await interaction.reply({ content: `✅ 已回答：**${lastAnswer}**`, flags: [MessageFlags.Ephemeral] });
-      try {
-        const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId!);
-        if (channel && 'messages' in channel) {
-          const msg = await channel.messages.fetch(pending.messageId);
-          await msg.edit({ embeds: [summaryEmbed], components: [] });
-        }
-      } catch (e) {
-        log.warn({ threadId, error: e }, '無法更新原始訊息');
-      }
-    }
+    await interaction.editReply({ embeds: [summaryEmbed], components: [] });
 
     store.resolvePendingApproval(threadId, {
       behavior: 'allow',
@@ -53,7 +38,6 @@ async function advanceOrFinalize(
 
     log.info({ threadId, answers: askState.collectedAnswers }, '所有問題已回答');
   } else {
-    // 前進到下一題
     askState.currentQuestionIndex = nextIdx;
     askState.selectedOptions = new Set();
     askState.isMultiSelect = askState.questions[nextIdx].multiSelect;
@@ -61,22 +45,7 @@ async function advanceOrFinalize(
     const nextEmbed = buildAskQuestionStepEmbed(askState);
     const nextButtons = buildQuestionButtons(threadId, askState);
 
-    if (interaction.isButton()) {
-      await interaction.update({ embeds: [nextEmbed], components: nextButtons });
-    } else {
-      // Modal 提交
-      const lastAnswer = askState.collectedAnswers[String(nextIdx - 1)] || '';
-      await interaction.reply({ content: `✅ 已回答：**${lastAnswer}**`, flags: [MessageFlags.Ephemeral] });
-      try {
-        const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId!);
-        if (channel && 'messages' in channel) {
-          const msg = await channel.messages.fetch(pending.messageId);
-          await msg.edit({ embeds: [nextEmbed], components: nextButtons });
-        }
-      } catch (e) {
-        log.warn({ threadId, error: e }, '無法更新原始訊息');
-      }
-    }
+    await interaction.editReply({ embeds: [nextEmbed], components: nextButtons });
 
     log.info({ threadId, nextQuestion: nextIdx }, '前進到下一題');
   }
@@ -84,13 +53,7 @@ async function advanceOrFinalize(
 
 /**
  * 處理選項按鈕點擊（單選直接前進，多選 toggle 選中狀態）
- *
- * @param interaction - Discord 按鈕互動事件
- * @param threadId - 對應的 Thread ID
- * @param qIdx - 當前問題索引
- * @param optIdx - 被點擊的選項索引
- * @param deps - AskHandler 依賴
- * @returns 無回傳值
+ * discord-client.ts 已預先 deferUpdate，直接 editReply
  */
 export async function handleAskOptionClick(
   interaction: ButtonInteraction,
@@ -102,19 +65,18 @@ export async function handleAskOptionClick(
   const pending = deps.store.getPendingApproval(threadId);
 
   if (!pending?.askState) {
-    await interaction.reply({ content: '⚠️ 此請求已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.editReply({ content: '⚠️ 此請求已過期' });
     return;
   }
 
   const { askState } = pending;
 
   if (qIdx !== askState.currentQuestionIndex) {
-    await interaction.reply({ content: '⚠️ 此選項已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.editReply({ content: '⚠️ 此選項已過期' });
     return;
   }
 
   if (askState.isMultiSelect) {
-    // 多選：toggle 選中狀態
     if (askState.selectedOptions.has(optIdx)) {
       askState.selectedOptions.delete(optIdx);
     } else {
@@ -123,9 +85,8 @@ export async function handleAskOptionClick(
 
     const embed = buildAskQuestionStepEmbed(askState);
     const buttons = buildQuestionButtons(threadId, askState);
-    await interaction.update({ embeds: [embed], components: buttons });
+    await interaction.editReply({ embeds: [embed], components: buttons });
   } else {
-    // 單選：記錄答案並前進
     const selectedLabel = askState.questions[qIdx].options[optIdx]?.label || `選項 ${optIdx + 1}`;
     askState.collectedAnswers[String(qIdx)] = selectedLabel;
     await advanceOrFinalize(threadId, pending, interaction, deps.store);
@@ -133,13 +94,8 @@ export async function handleAskOptionClick(
 }
 
 /**
- * 處理多選確認按鈕，將已選選項記錄為答案並前進至下一題
- *
- * @param interaction - Discord 按鈕互動事件
- * @param threadId - 對應的 Thread ID
- * @param qIdx - 當前問題索引
- * @param deps - AskHandler 依賴
- * @returns 無回傳值
+ * 處理多選確認按鈕
+ * discord-client.ts 已預先 deferUpdate，直接 editReply
  */
 export async function handleAskSubmit(
   interaction: ButtonInteraction,
@@ -150,19 +106,19 @@ export async function handleAskSubmit(
   const pending = deps.store.getPendingApproval(threadId);
 
   if (!pending?.askState) {
-    await interaction.reply({ content: '⚠️ 此請求已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.editReply({ content: '⚠️ 此請求已過期' });
     return;
   }
 
   const { askState } = pending;
 
   if (qIdx !== askState.currentQuestionIndex) {
-    await interaction.reply({ content: '⚠️ 此選項已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.editReply({ content: '⚠️ 此選項已過期' });
     return;
   }
 
   if (askState.selectedOptions.size === 0) {
-    await interaction.reply({ content: '⚠️ 請至少選擇一個選項', flags: [MessageFlags.Ephemeral] });
+    await interaction.editReply({ content: '⚠️ 請至少選擇一個選項' });
     return;
   }
 
@@ -176,13 +132,8 @@ export async function handleAskSubmit(
 }
 
 /**
- * 處理「其他」按鈕點擊，顯示 Modal 讓使用者輸入自訂回答
- *
- * @param interaction - Discord 按鈕互動事件
- * @param threadId - 對應的 Thread ID
- * @param qIdx - 當前問題索引
- * @param deps - AskHandler 依賴
- * @returns 無回傳值
+ * 處理「其他」按鈕點擊，顯示 Modal
+ * showModal 必須是 first response，discord-client.ts 不會預先 defer 此類按鈕
  */
 export async function handleAskOther(
   interaction: ButtonInteraction,
@@ -193,12 +144,12 @@ export async function handleAskOther(
   const pending = deps.store.getPendingApproval(threadId);
 
   if (!pending?.askState) {
-    await interaction.reply({ content: '⚠️ 此請求已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.reply({ content: '⚠️ 此請求已過期', flags: [64] });
     return;
   }
 
   if (qIdx !== pending.askState.currentQuestionIndex) {
-    await interaction.reply({ content: '⚠️ 此選項已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.reply({ content: '⚠️ 此選項已過期', flags: [64] });
     return;
   }
 
@@ -208,13 +159,8 @@ export async function handleAskOther(
 }
 
 /**
- * 處理 Modal 提交，將使用者自訂文字記錄為答案並前進至下一題
- *
- * @param interaction - Discord Modal 提交互動事件
- * @param threadId - 對應的 Thread ID
- * @param qIdx - 當前問題索引
- * @param deps - AskHandler 依賴
- * @returns 無回傳值
+ * 處理 Modal 提交
+ * discord-client.ts 已預先 deferReply，直接 editReply
  */
 export async function handleAskModalSubmit(
   interaction: ModalSubmitInteraction,
@@ -225,12 +171,12 @@ export async function handleAskModalSubmit(
   const pending = deps.store.getPendingApproval(threadId);
 
   if (!pending?.askState) {
-    await interaction.reply({ content: '⚠️ 此請求已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.editReply({ content: '⚠️ 此請求已過期' });
     return;
   }
 
   if (qIdx !== pending.askState.currentQuestionIndex) {
-    await interaction.reply({ content: '⚠️ 此選項已過期', flags: [MessageFlags.Ephemeral] });
+    await interaction.editReply({ content: '⚠️ 此選項已過期' });
     return;
   }
 

@@ -28,6 +28,22 @@ export async function createDiscordClient(
   client.once('clientReady', () => {});
 
   client.on('interactionCreate', async (interaction) => {
+    // 按鈕與 Modal 互動：在 event loop 可能因 SDK streaming 而延遲的情況下，
+    // 於業務邏輯執行前立即 defer，確保在 Discord 3 秒視窗內送出 ACK。
+    // ask_other: 需以 showModal 作為 first response，不能預先 defer。
+    if (interaction.isButton() && !interaction.customId.startsWith('ask_other:')) {
+      const useUpdate =
+        interaction.customId.startsWith('ask:') ||
+        interaction.customId.startsWith('ask_submit:');
+      if (useUpdate) {
+        await interaction.deferUpdate().catch(() => {});
+      } else {
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
+      }
+    } else if (interaction.isModalSubmit()) {
+      await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
+    }
+
     try {
       await onInteraction(interaction);
     } catch (error) {
