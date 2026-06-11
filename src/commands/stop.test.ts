@@ -1,36 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MessageFlags } from 'discord.js';
+import { ButtonStyle, ComponentType } from 'discord.js';
 import { StateStore } from '../effects/state-store.js';
-import type { BotConfig, SessionState } from '../types.js';
-import { execute, executeStop } from './stop.js';
+import type { SessionState } from '../types.js';
+import { executeStop, buildStopConfirmRow } from './stop.js';
 
 vi.mock('../effects/discord-sender.js', () => ({
-  deferReply: vi.fn().mockResolvedValue(undefined),
-  editReply: vi.fn().mockResolvedValue(undefined),
   sendInThread: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../modules/embeds.js', () => ({
-  buildStopPreviewEmbed: vi.fn().mockReturnValue({ title: 'preview' }),
   buildStopConfirmEmbed: vi.fn().mockReturnValue({ title: 'confirmed' }),
 }));
-
-import { editReply } from '../effects/discord-sender.js';
-
-const mockConfig: BotConfig = {
-  discordToken: 'token',
-  discordGuildId: 'guild',
-  discordChannelId: 'channel-1',
-  allowedUserIds: ['user-1'],
-  defaultCwd: '/test',
-  defaultModel: 'model',
-  defaultPermissionMode: 'default',
-  maxMessageLength: 2000,
-  streamUpdateIntervalMs: 2000,
-  rateLimitWindowMs: 60000,
-  rateLimitMaxRequests: 5,
-  projects: [],
-};
 
 function makeSession(threadId: string, overrides?: Partial<SessionState>): SessionState {
   return {
@@ -43,6 +23,7 @@ function makeSession(threadId: string, overrides?: Partial<SessionState>): Sessi
     promptText: 'test',
     cwd: '/test',
     model: 'model',
+    effort: null,
     toolCount: 3,
     tools: { Read: 2, Bash: 1 },
     pendingApproval: null,
@@ -52,62 +33,22 @@ function makeSession(threadId: string, overrides?: Partial<SessionState>): Sessi
   };
 }
 
-function makeInteraction(overrides?: Record<string, unknown>) {
-  return {
-    user: { id: 'user-1' },
-    channelId: 'channel-1',
-    channel: {
-      isThread: () => true,
-      id: 'thread-1',
-      parentId: 'channel-1',
-    },
-    reply: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  } as unknown;
-}
+describe('buildStopConfirmRow', () => {
+  it('產生確認與取消按鈕，customId 帶有 threadId', () => {
+    const row = buildStopConfirmRow('thread-1').toJSON();
 
-describe('stop execute', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+    expect(row.type).toBe(ComponentType.ActionRow);
+    expect(row.components).toHaveLength(2);
 
-  it('未授權使用者回覆錯誤', async () => {
-    const interaction = makeInteraction({ user: { id: 'bad' } });
-    const store = new StateStore();
-    await execute(interaction as never, mockConfig, store, {} as never);
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
-      expect.objectContaining({ flags: [MessageFlags.Ephemeral] }),
-    );
-  });
-
-  it('無活躍 session 時提示', async () => {
-    const interaction = makeInteraction({
-      channel: { isThread: () => false, parentId: null },
-      channelId: 'channel-1',
+    const [confirm, cancel] = row.components;
+    expect(confirm).toMatchObject({
+      custom_id: 'confirm_stop:thread-1',
+      style: ButtonStyle.Danger,
     });
-    const store = new StateStore();
-    await execute(interaction as never, mockConfig, store, {} as never);
-    expect(editReply).toHaveBeenCalledWith(
-      interaction,
-      expect.objectContaining({
-        content: expect.stringContaining('沒有正在執行的任務'),
-      }),
-    );
-  });
-
-  it('有 session 時顯示摘要與確認按鈕', async () => {
-    const store = new StateStore();
-    store.setSession('thread-1', makeSession('thread-1'));
-
-    const interaction = makeInteraction();
-    await execute(interaction as never, mockConfig, store, {} as never);
-    expect(editReply).toHaveBeenCalledWith(
-      interaction,
-      expect.objectContaining({
-        embeds: expect.any(Array),
-        components: expect.any(Array),
-      }),
-    );
+    expect(cancel).toMatchObject({
+      custom_id: 'cancel_stop:thread-1',
+      style: ButtonStyle.Secondary,
+    });
   });
 });
 

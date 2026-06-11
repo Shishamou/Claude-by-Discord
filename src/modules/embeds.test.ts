@@ -4,15 +4,14 @@ import {
   buildPermissionRequestEmbed,
   buildProgressEmbed,
   buildStreamingTextEmbed,
-  buildResultEmbed,
   buildErrorEmbed,
   buildStatusEmbed,
   buildSessionStartEmbed,
+  buildStopButtonRow,
   buildStopConfirmEmbed,
   buildStopPreviewEmbed,
   buildNotificationEmbed,
   buildFollowUpEmbed,
-  buildWaitingInputEmbed,
   buildMultiStatusEmbed,
   buildGlobalStatusEmbed,
   buildRetryEmbed,
@@ -22,7 +21,7 @@ import {
   buildOrphanCleanupEmbed,
 } from './embeds.js';
 import { COLORS } from '../types.js';
-import type { SessionState, TokenUsage, AskState } from '../types.js';
+import type { SessionState, AskState } from '../types.js';
 import type { GlobalUsageStats } from '../effects/usage-store.js';
 
 function makeSession(overrides?: Partial<SessionState>): SessionState {
@@ -36,6 +35,7 @@ function makeSession(overrides?: Partial<SessionState>): SessionState {
     promptText: 'test prompt',
     cwd: '/test',
     model: 'claude-sonnet-4-5-20250929',
+    effort: null,
     toolCount: 0,
     tools: {},
     pendingApproval: null,
@@ -101,56 +101,6 @@ describe('buildStreamingTextEmbed', () => {
     const embed = buildStreamingTextEmbed('hello', 3);
     expect(embed.author?.name).toContain('回應中');
     expect(embed.description).toBe('hello');
-  });
-});
-
-describe('buildResultEmbed', () => {
-  it('顯示結果與工具統計', () => {
-    const embed = buildResultEmbed('完成', { toolCount: 3, tools: { Read: 2, Write: 1 } });
-    expect(embed.title).toContain('完成');
-    expect(embed.fields?.some((f) => f.value.includes('Read'))).toBe(true);
-  });
-
-  it('空 tools 顯示「無」', () => {
-    const embed = buildResultEmbed('ok', { toolCount: 0, tools: {} });
-    expect(embed.fields?.some((f) => f.value === '無')).toBe(true);
-  });
-
-  it('有 usage 時顯示 token 消耗', () => {
-    const usage: TokenUsage = { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150, costUsd: 0 };
-    const embed = buildResultEmbed('ok', { toolCount: 0, tools: {} }, usage);
-    expect(embed.fields?.some((f) => f.name.includes('Token'))).toBe(true);
-  });
-
-  it('有 cache 時顯示快取欄位', () => {
-    const usage: TokenUsage = { input: 100, output: 50, cacheRead: 200, cacheWrite: 10, total: 150, costUsd: 0 };
-    const embed = buildResultEmbed('ok', { toolCount: 0, tools: {} }, usage);
-    expect(embed.fields?.some((f) => f.name.includes('快取'))).toBe(true);
-  });
-
-  it('無 cache 時不顯示快取', () => {
-    const usage: TokenUsage = { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150, costUsd: 0 };
-    const embed = buildResultEmbed('ok', { toolCount: 0, tools: {} }, usage);
-    expect(embed.fields?.some((f) => f.name.includes('快取'))).toBe(false);
-  });
-
-  it('有 durationMs 和 costUsd 時顯示', () => {
-    const embed = buildResultEmbed('ok', { toolCount: 0, tools: {} }, undefined, 5000, 0.05);
-    expect(embed.fields?.some((f) => f.name.includes('耗時'))).toBe(true);
-    expect(embed.fields?.some((f) => f.name.includes('費用'))).toBe(true);
-  });
-
-  it('工具統計按次數排序', () => {
-    const embed = buildResultEmbed('ok', {
-      toolCount: 6,
-      tools: { Write: 1, Read: 3, Bash: 2 },
-    });
-    const toolField = embed.fields?.find((f) => f.name.includes('工具統計'));
-    const lines = toolField!.value.split('\n');
-    // Read(3) 應在最前
-    expect(lines[0]).toContain('Read');
-    expect(lines[1]).toContain('Bash');
-    expect(lines[2]).toContain('Write');
   });
 });
 
@@ -231,6 +181,38 @@ describe('buildSessionStartEmbed', () => {
   it('超長 prompt 被截斷', () => {
     const embed = buildSessionStartEmbed('a'.repeat(200), '/cwd', 'model');
     expect(embed.title!.length).toBeLessThanOrEqual(101);
+  });
+
+  it('有 effort 時顯示 Effort 欄位', () => {
+    const embed = buildSessionStartEmbed('做些什麼', '/cwd', 'model', 'high');
+    const effortField = embed.fields?.find((f) => f.name === 'Effort');
+    expect(effortField?.value).toBe('high');
+  });
+
+  it('effort 為 null 時不顯示 Effort 欄位', () => {
+    const embed = buildSessionStartEmbed('做些什麼', '/cwd', 'model', null);
+    expect(embed.fields?.some((f) => f.name === 'Effort')).toBe(false);
+  });
+
+  it('未傳 effort 時不顯示 Effort 欄位', () => {
+    const embed = buildSessionStartEmbed('做些什麼', '/cwd', 'model');
+    expect(embed.fields?.some((f) => f.name === 'Effort')).toBe(false);
+  });
+});
+
+describe('buildStopButtonRow', () => {
+  it('customId 綁定 threadId', () => {
+    const row = buildStopButtonRow('thread-123');
+    const json = row.toJSON();
+    expect(json.components).toHaveLength(1);
+    expect(json.components[0]).toMatchObject({ custom_id: 'stop_request:thread-123' });
+  });
+
+  it('使用 Danger 樣式與 🛑 emoji', () => {
+    const row = buildStopButtonRow('t1');
+    const button = row.toJSON().components[0] as { style: number; emoji?: { name?: string } };
+    expect(button.style).toBe(4); // ButtonStyle.Danger
+    expect(button.emoji?.name).toBe('🛑');
   });
 });
 
@@ -337,13 +319,6 @@ describe('buildFollowUpEmbed', () => {
   it('顯示續問文字', () => {
     const embed = buildFollowUpEmbed('續問內容');
     expect(embed.description).toContain('續問內容');
-  });
-});
-
-describe('buildWaitingInputEmbed', () => {
-  it('顯示等待輸入', () => {
-    const embed = buildWaitingInputEmbed();
-    expect(embed.title).toContain('等待');
   });
 });
 
@@ -487,34 +462,9 @@ describe('buildOrphanCleanupEmbed', () => {
     expect(embed.color).toBe(COLORS.Notification);
   });
 
-  it('描述包含重新使用提示', () => {
+  it('描述包含重新開始提示', () => {
     const embed = buildOrphanCleanupEmbed();
-    expect(embed.description).toContain('/prompt');
-  });
-});
-
-// ─── buildResultEmbed - edge cases ──────────────────
-
-describe('buildResultEmbed - edge cases', () => {
-  it('空 resultText 時 description 為 undefined', () => {
-    const embed = buildResultEmbed('', { toolCount: 0, tools: {} });
-    expect(embed.description).toBeUndefined();
-  });
-
-  it('僅有 cacheRead 時快取只顯示讀取', () => {
-    const usage: TokenUsage = { input: 100, output: 50, cacheRead: 200, cacheWrite: 0, total: 150, costUsd: 0 };
-    const embed = buildResultEmbed('ok', { toolCount: 0, tools: {} }, usage);
-    const cacheField = embed.fields?.find((f) => f.name.includes('快取'));
-    expect(cacheField?.value).toContain('讀取');
-    expect(cacheField?.value).not.toContain('寫入');
-  });
-
-  it('僅有 cacheWrite 時快取只顯示寫入', () => {
-    const usage: TokenUsage = { input: 100, output: 50, cacheRead: 0, cacheWrite: 50, total: 150, costUsd: 0 };
-    const embed = buildResultEmbed('ok', { toolCount: 0, tools: {} }, usage);
-    const cacheField = embed.fields?.find((f) => f.name.includes('快取'));
-    expect(cacheField?.value).toContain('寫入');
-    expect(cacheField?.value).not.toContain('讀取');
+    expect(embed.description).toContain('@ 提及 Bot');
   });
 });
 

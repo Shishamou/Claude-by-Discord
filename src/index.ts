@@ -14,7 +14,7 @@ import { createInteractionHandler } from './handlers/interaction-handler.js';
 import { startQuery } from './effects/claude-bridge.js';
 import { createMessageHandler } from './handlers/stream-handler.js';
 import { createCanUseTool } from './handlers/permission-handler.js';
-import { buildErrorEmbed, buildWaitingInputEmbed, buildOrphanCleanupEmbed } from './modules/embeds.js';
+import { buildErrorEmbed, buildOrphanCleanupEmbed } from './modules/embeds.js';
 import { sendInThread } from './effects/discord-sender.js';
 import { createThreadMessageHandler } from './handlers/thread-message-handler.js';
 import { createMentionHandler } from './handlers/mention-handler.js';
@@ -74,6 +74,7 @@ async function main() {
     const { sessionId } = await startQuery(session.promptText, {
       cwd: session.cwd,
       model: session.model,
+      effort: session.effort,
       permissionMode: config.defaultPermissionMode,
       abortController: session.abortController,
       canUseTool,
@@ -107,14 +108,11 @@ async function main() {
         store.updateSession(threadId, { status: 'waiting_input' });
 
         try {
-          // 發送等待輸入 Embed
-          const waitEmbed = buildWaitingInputEmbed();
-          await sendInThread(thread, waitEmbed);
-          // @mention 通知使用者
+          // 純文字完成通知（@mention 使用者）
           const currentSession = store.getSession(threadId);
           if (currentSession?.userId) {
             if (thread.archived) await thread.setArchived(false);
-            await thread.send(`<@${currentSession.userId}> 任務已完成，可在此 Thread 續問或使用 \`/stop\` 結束。`);
+            await thread.send(`✅ <@${currentSession.userId}> 任務完成，可在此 Thread 繼續對話。`);
           }
         } catch {
           // Thread 可能已不存在
@@ -167,33 +165,35 @@ async function main() {
     await threadMessageHandler(message);
   });
 
-  // 啟動時清理孤兒 Thread
-  try {
-    const mainChannel = await client.channels.fetch(config.discordChannelId);
-    if (mainChannel && 'threads' in mainChannel) {
-      const activeThreads = await (mainChannel as import('discord.js').TextChannel).threads.fetchActive();
-      const botId = client.user?.id;
-      let cleaned = 0;
+  // 啟動時清理孤兒 Thread（遍歷所有已設定的頻道）
+  for (const channelConfig of config.channels) {
+    try {
+      const mainChannel = await client.channels.fetch(channelConfig.channelId);
+      if (mainChannel && 'threads' in mainChannel) {
+        const activeThreads = await (mainChannel as import('discord.js').TextChannel).threads.fetchActive();
+        const botId = client.user?.id;
+        let cleaned = 0;
 
-      for (const [, thread] of activeThreads.threads) {
-        // 只清理 Bot 建立的且不在 store 中的 Thread
-        if (thread.ownerId === botId && !store.getSession(thread.id)) {
-          try {
-            await sendInThread(thread, buildOrphanCleanupEmbed());
-            await thread.setArchived(true);
-            cleaned++;
-          } catch {
-            // Thread 可能已被刪除
+        for (const [, thread] of activeThreads.threads) {
+          // 只清理 Bot 建立的且不在 store 中的 Thread
+          if (thread.ownerId === botId && !store.getSession(thread.id)) {
+            try {
+              await sendInThread(thread, buildOrphanCleanupEmbed());
+              await thread.setArchived(true);
+              cleaned++;
+            } catch {
+              // Thread 可能已被刪除
+            }
           }
         }
-      }
 
-      if (cleaned > 0) {
-        log.info({ cleaned }, '已清理孤兒 Thread');
+        if (cleaned > 0) {
+          log.info({ cleaned, channel: channelConfig.name }, '已清理孤兒 Thread');
+        }
       }
+    } catch (error) {
+      log.warn({ err: error, channel: channelConfig.name }, '清理孤兒 Thread 失敗（非致命）');
     }
-  } catch (error) {
-    log.warn({ err: error }, '清理孤兒 Thread 失敗（非致命）');
   }
 
   // 啟動時檢查 Claude Code 連線
@@ -203,7 +203,7 @@ async function main() {
   let claudeModels = '';
   let claudeError = '';
   try {
-    const status = await checkClaudeStatus(config.defaultCwd);
+    const status = await checkClaudeStatus(config.channels[0]?.path ?? process.cwd());
     if (status.success) {
       claudeConnected = true;
       claudeAccount = status.accountInfo?.email ?? '';
@@ -243,9 +243,18 @@ async function main() {
   if (claudeModels) bannerLines.push(`  ${dim('模型')}    ${claudeModels}`);
   if (claudeAccount || claudeSubscription || claudeModels) bannerLines.push('');
   bannerLines.push(`  ${dim('預設模型')}  ${config.defaultModel}`);
+  bannerLines.push(`  ${dim('預設 Effort')}  ${config.defaultEffort ?? '（CLI 預設）'}`);
   bannerLines.push(`  ${dim('權限模式')}  ${permName}`);
-  if (config.defaultCwd) bannerLines.push(`  ${dim('工作目錄')}  ${config.defaultCwd}`);
-  bannerLines.push(`  ${dim('允許專案')}  ${config.projects.length} 個 (${config.projects.map((p) => p.name).join(', ')})`);
+  bannerLines.push('');
+  bannerLines.push(`  ${dim('頻道')}  ${config.channels.length} 個`);
+  for (const ch of config.channels) {
+    const overrides = [
+      ch.model ? `model: ${ch.model}` : null,
+      ch.effort ? `effort: ${ch.effort}` : null,
+    ].filter(Boolean);
+    const overrideText = overrides.length > 0 ? dim(` (${overrides.join(', ')})`) : '';
+    bannerLines.push(`    ${ch.name} → ${ch.path}${overrideText}`);
+  }
   bannerLines.push('');
   bannerLines.push(`  ${cyan('就緒，等待指令。')}`);
   bannerLines.push('');

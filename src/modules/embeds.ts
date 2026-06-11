@@ -1,8 +1,8 @@
-import type { APIEmbed } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type APIEmbed } from 'discord.js';
 import type {
   AskState,
+  EffortLevel,
   SessionState,
-  TokenUsage,
 } from '../types.js';
 import type { GlobalUsageStats, SessionUsageRecord } from '../effects/usage-store.js';
 import {
@@ -162,89 +162,6 @@ export function buildStopPreviewEmbed(
   };
 }
 
-// ─── 結果 Embed ─────────────────────────────────────
-
-/**
- * 建構任務完成結果 Embed
- * @param resultText - 任務完成的結果文字
- * @param stats - 工具使用統計（次數與各工具計數）
- * @param usage - 選填的 Token 使用量
- * @param durationMs - 選填的執行時間（毫秒）
- * @param costUsd - 選填的費用（美元）
- * @returns 任務完成結果 Embed
- */
-export function buildResultEmbed(
-  resultText: string,
-  stats: { toolCount: number; tools: Record<string, number> },
-  usage?: TokenUsage,
-  durationMs?: number,
-  costUsd?: number,
-): APIEmbed {
-  const toolList = Object.entries(stats.tools)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([name, count]) => `${TOOL_EMOJI[name] || '🔧'} ${name}: **${count}**`)
-    .join('\n');
-
-  const fields: APIEmbed['fields'] = [
-    {
-      name: `📊 工具統計（共 ${stats.toolCount} 次）`,
-      value: toolList || '無',
-      inline: true,
-    },
-  ];
-
-  if (usage) {
-    fields.push({
-      name: '🪙 Token 消耗',
-      value: [
-        `輸入: **${formatNumber(usage.input)}**`,
-        `輸出: **${formatNumber(usage.output)}**`,
-        `總計: **${formatNumber(usage.total)}**`,
-      ].join('\n'),
-      inline: true,
-    });
-
-    if (usage.cacheRead > 0 || usage.cacheWrite > 0) {
-      fields.push({
-        name: '♻️ 快取',
-        value: [
-          usage.cacheRead > 0 ? `讀取: ${formatNumber(usage.cacheRead)}` : null,
-          usage.cacheWrite > 0 ? `寫入: ${formatNumber(usage.cacheWrite)}` : null,
-        ]
-          .filter(Boolean)
-          .join('\n'),
-        inline: true,
-      });
-    }
-  }
-
-  if (durationMs !== undefined) {
-    fields.push({
-      name: '⏱️ 耗時',
-      value: formatDuration(durationMs),
-      inline: true,
-    });
-  }
-
-  if (costUsd !== undefined) {
-    fields.push({
-      name: '💰 費用',
-      value: formatCost(costUsd),
-      inline: true,
-    });
-  }
-
-  return {
-    color: COLORS.Stop,
-    author: { name: '🏁 任務完成' },
-    title: 'Claude Code 已完成任務',
-    description: resultText ? truncate(resultText, 4000) : undefined,
-    fields,
-    timestamp: new Date().toISOString(),
-  };
-}
-
 // ─── 錯誤 Embed ─────────────────────────────────────
 
 /**
@@ -283,7 +200,7 @@ export function buildStatusEmbed(
       color: COLORS.Info,
       author: { name: 'ℹ️ 狀態' },
       title: '無活躍 Session',
-      description: '目前沒有正在執行的任務。使用 `/prompt` 開始新任務。',
+      description: '目前沒有正在執行的任務。在已設定的頻道中 @ 提及 Bot 即可開始新任務。',
       timestamp: new Date().toISOString(),
     };
   }
@@ -343,23 +260,52 @@ export function buildStatusEmbed(
  * @param promptText - 使用者的 Prompt 文字
  * @param cwd - 工作目錄
  * @param model - 使用的模型名稱
+ * @param effort - 選填的推理深度（null/未設定時不顯示）
  * @returns Session 開始 Embed
  */
 export function buildSessionStartEmbed(
   promptText: string,
   cwd: string,
   model: string,
+  effort?: EffortLevel | null,
 ): APIEmbed {
+  const fields: APIEmbed['fields'] = [
+    { name: '工作目錄', value: `\`${cwd}\``, inline: true },
+    { name: '模型', value: model, inline: true },
+  ];
+
+  if (effort) {
+    fields.push({ name: 'Effort', value: effort, inline: true });
+  }
+
   return {
     color: COLORS.SessionStart,
     author: { name: '🚀 Session 開始' },
     title: truncate(promptText, 100),
-    fields: [
-      { name: '工作目錄', value: `\`${cwd}\``, inline: true },
-      { name: '模型', value: model, inline: true },
-    ],
+    fields,
     timestamp: new Date().toISOString(),
   };
+}
+
+// ─── 中斷請求按鈕 ───────────────────────────────────
+
+/**
+ * 建構 Session 開始訊息附帶的 🛑 中斷請求按鈕列
+ *
+ * 點擊後由 interaction-handler 顯示既有的確認／取消按鈕
+ * （`confirm_stop:<threadId>` / `cancel_stop:<threadId>`）。
+ *
+ * @param threadId - 對應的 Thread ID，用於按鈕 customId 綁定
+ * @returns 中斷請求按鈕列
+ */
+export function buildStopButtonRow(threadId: string): ActionRowBuilder<ButtonBuilder> {
+  const stop = new ButtonBuilder()
+    .setCustomId(`stop_request:${threadId}`)
+    .setLabel('中斷')
+    .setStyle(ButtonStyle.Danger)
+    .setEmoji('🛑');
+
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(stop);
 }
 
 // ─── 中斷確認 Embed ─────────────────────────────────
@@ -436,22 +382,6 @@ export function buildFollowUpEmbed(promptText: string, fileCount = 0, filenames:
     author: { name: '💬 續問' },
     title: '正在處理續問...',
     description: truncate(description, 4000),
-    timestamp: new Date().toISOString(),
-  };
-}
-
-// ─── 等待輸入 Embed ─────────────────────────────────
-
-/**
- * 建構等待輸入 Embed
- * @returns 等待輸入 Embed
- */
-export function buildWaitingInputEmbed(): APIEmbed {
-  return {
-    color: COLORS.WaitingInput,
-    author: { name: '⏸️ 等待輸入' },
-    title: '任務已完成，等待續問',
-    description: '在此 Thread 中輸入訊息即可繼續對話。使用 `/stop` 結束 Session。',
     timestamp: new Date().toISOString(),
   };
 }
@@ -694,7 +624,7 @@ export function buildOrphanCleanupEmbed(): APIEmbed {
   return {
     color: COLORS.Notification,
     author: { name: '⚠️ Bot 已重啟' },
-    description: '此 Session 已中斷。請重新使用 `/prompt` 開始新任務。',
+    description: '此 Session 已中斷。請在頻道中 @ 提及 Bot 開始新任務。',
     timestamp: new Date().toISOString(),
   };
 }

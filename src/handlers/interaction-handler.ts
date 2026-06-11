@@ -1,12 +1,8 @@
 import { MessageFlags, type Interaction, type Client } from 'discord.js';
-import type { BotConfig, SessionState } from '../types.js';
+import type { BotConfig } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import * as statusCmd from '../commands/status.js';
-import * as stopCmd from '../commands/stop.js';
-import * as promptCmd from '../commands/prompt.js';
-import * as historyCmd from '../commands/history.js';
-import * as retryCmd from '../commands/retry.js';
-import type { RateLimitStore } from '../effects/rate-limit-store.js';
+import { executeStop, buildStopConfirmRow } from '../commands/stop.js';
 import type { UsageStore } from '../effects/usage-store.js';
 import {
   handleAskOptionClick,
@@ -20,8 +16,6 @@ export interface InteractionHandlerDeps {
   config: BotConfig;
   store: StateStore;
   client: Client;
-  startClaudeQuery: (session: SessionState, threadId: string) => Promise<void>;
-  rateLimitStore: RateLimitStore;
   usageStore: UsageStore;
 }
 
@@ -38,30 +32,8 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
     // Slash Commands
     if (interaction.isChatInputCommand()) {
       switch (interaction.commandName) {
-        case 'prompt':
-          await promptCmd.execute(
-            interaction,
-            deps.config,
-            deps.store,
-            deps.startClaudeQuery,
-            deps.rateLimitStore,
-          );
-          break;
-
-        case 'stop':
-          await stopCmd.execute(interaction, deps.config, deps.store, deps.client);
-          break;
-
         case 'status':
           await statusCmd.execute(interaction, deps.config, deps.store, deps.usageStore);
-          break;
-
-        case 'history':
-          await historyCmd.execute(interaction, deps.config, deps.store);
-          break;
-
-        case 'retry':
-          await retryCmd.execute(interaction, deps.config, deps.store, deps.startClaudeQuery);
           break;
 
         default:
@@ -113,6 +85,23 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
         return;
       }
 
+      // 中斷請求 → 顯示確認/取消按鈕（discord-client.ts 已預先 deferReply）
+      if (customId.startsWith('stop_request:')) {
+        const threadId = customId.slice('stop_request:'.length);
+        const session = deps.store.getSession(threadId);
+
+        if (!session) {
+          await interaction.editReply({ content: '⚠️ 此任務已結束' });
+          return;
+        }
+
+        await interaction.editReply({
+          content: '🛑 確定要中斷目前的任務嗎？',
+          components: [buildStopConfirmRow(threadId)],
+        });
+        return;
+      }
+
       // 確認中斷（discord-client.ts 已預先 deferReply）
       if (customId.startsWith('confirm_stop:')) {
         const threadId = customId.slice('confirm_stop:'.length);
@@ -124,7 +113,7 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
         }
 
         await interaction.editReply({ content: '🛑 任務已中斷' });
-        await stopCmd.executeStop(threadId, deps.store, deps.client);
+        await executeStop(threadId, deps.store, deps.client);
         return;
       }
 

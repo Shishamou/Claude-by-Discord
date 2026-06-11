@@ -21,16 +21,15 @@ import { buildStatusEmbed, buildGlobalStatusEmbed } from '../modules/embeds.js';
 const mockConfig: BotConfig = {
   discordToken: 'token',
   discordGuildId: 'guild',
-  discordChannelId: 'channel-1',
   allowedUserIds: ['user-1'],
-  defaultCwd: '/test',
   defaultModel: 'model',
+  defaultEffort: null,
   defaultPermissionMode: 'default',
   maxMessageLength: 2000,
   streamUpdateIntervalMs: 2000,
   rateLimitWindowMs: 60000,
   rateLimitMaxRequests: 5,
-  projects: [],
+  channels: [{ channelId: 'channel-1', name: 'test', path: '/test' }],
 };
 
 function makeInteraction(inThread: boolean, threadId = 'thread-1') {
@@ -64,7 +63,23 @@ describe('status execute', () => {
     );
   });
 
-  it('在 Thread 內顯示 session 狀態', async () => {
+  it('未設定的頻道回覆錯誤', async () => {
+    const interaction = {
+      user: { id: 'user-1' },
+      channelId: 'channel-x',
+      channel: { isThread: () => false, parentId: null },
+      reply: vi.fn().mockResolvedValue(undefined),
+    } as unknown;
+    const store = new StateStore();
+    const usageStore = new UsageStore();
+    await execute(interaction as never, mockConfig, store, usageStore);
+    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+      expect.objectContaining({ flags: [MessageFlags.Ephemeral] }),
+    );
+    expect(editReply).not.toHaveBeenCalled();
+  });
+
+  it('在 Thread 內顯示 session 狀態（透過父頻道授權）', async () => {
     const store = new StateStore();
     store.setSession('thread-1', {
       sessionId: null,
@@ -76,6 +91,7 @@ describe('status execute', () => {
       promptText: 'test',
       cwd: '/test',
       model: 'model',
+      effort: null,
       toolCount: 0,
       tools: {},
       pendingApproval: null,

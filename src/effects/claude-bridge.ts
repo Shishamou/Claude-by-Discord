@@ -1,10 +1,12 @@
 import { query, type Query, type Options, type SDKMessage, type SDKUserMessage, type CanUseTool } from '@anthropic-ai/claude-agent-sdk';
-import type { FileAttachment, PermissionMode } from '../types.js';
+import type { EffortLevel, FileAttachment, PermissionMode } from '../types.js';
 
 /** {@link startQuery} 的選項參數 */
 export interface ClaudeBridgeOptions {
   cwd: string;
   model: string;
+  /** 推理深度，透過 CLAUDE_CODE_EFFORT_LEVEL 環境變數傳遞給 CLI（null/未設定時不注入） */
+  effort?: EffortLevel | null;
   permissionMode: PermissionMode;
   abortController: AbortController;
   canUseTool?: CanUseTool;
@@ -89,6 +91,10 @@ export async function startQuery(
     includePartialMessages: true,
     settingSources: ['project', 'local'],
     resume: opts.resume,
+    // Effort 透過環境變數傳遞給 CLI 子行程，未設定時不覆寫 Options.env
+    ...(opts.effort
+      ? { env: { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: opts.effort } }
+      : {}),
   };
 
   // 若有檔案附件（圖片/PDF），使用 AsyncIterable<SDKUserMessage> 格式

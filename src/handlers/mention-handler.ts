@@ -2,16 +2,13 @@ import { ChannelType, ThreadAutoArchiveDuration, type Message, type Client } fro
 import type { BotConfig, SessionState } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import { logger } from '../effects/logger.js';
-import { isUserAuthorized } from '../modules/permissions.js';
-import { buildSessionStartEmbed, buildErrorEmbed } from '../modules/embeds.js';
-import { sendInThread } from '../effects/discord-sender.js';
+import { isUserAuthorized, resolveChannelConfig } from '../modules/permissions.js';
+import { buildSessionStartEmbed, buildErrorEmbed, buildStopButtonRow } from '../modules/embeds.js';
+import { sendInThread, sendInThreadWithComponents } from '../effects/discord-sender.js';
 import { truncate } from '../modules/formatters.js';
 import { downloadAttachments } from './thread-message-handler.js';
 
 const log = logger.child({ module: 'Mention' });
-
-/** @mention 觸發時使用的模型（最便宜的 Haiku） */
-const MENTION_MODEL = 'claude-haiku-4-5-20251001';
 
 /** @mention 處理器的依賴注入介面 */
 export interface MentionHandlerDeps {
@@ -24,7 +21,8 @@ export interface MentionHandlerDeps {
 /**
  * 建立 @mention 處理器
  *
- * 當 Bot 在文字頻道被 @ 標注時，自動以 Haiku 模型建立 Thread 並開始對話。
+ * 當 Bot 在已設定的文字頻道（channels.json）被 @ 標注時，自動建立 Thread 並開始對話。
+ * 工作目錄、模型與 Effort 取自頻道設定，未覆寫時 fallback 到全域預設值。
  * 僅處理非 Thread 的 GuildText 頻道，並驗證使用者是否在授權名單中。
  */
 export function createMentionHandler(deps: MentionHandlerDeps) {
@@ -40,6 +38,10 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
     const botUser = deps.client.user;
     if (!botUser || !message.mentions.has(botUser)) return;
 
+    // 解析頻道設定，未設定的頻道一律靜默忽略
+    const channelConfig = resolveChannelConfig(message.channel.id, null, deps.config.channels);
+    if (!channelConfig) return;
+
     // 檢查使用者授權
     if (!isUserAuthorized(message.author.id, deps.config.allowedUserIds)) return;
 
@@ -51,7 +53,7 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
     if (!prompt && fileAttachments.length === 0) return;
 
     // 以此訊息建立 Thread（Discord UI 會顯示與訊息的連結）
-    const threadName = `@mention: ${truncate(prompt || '（附件）', 28)}`;
+    const threadName = `Session: ${truncate(prompt || '（附件）', 28)}`;
     let thread: import('discord.js').ThreadChannel;
     try {
       thread = await message.startThread({
@@ -68,11 +70,17 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
       .filter((f) => f.type === 'text' && f.textContent)
       .map((f) => `--- ${f.filename} ---\n${f.textContent}`)
       .join('\n\n');
-    const promptParts = [prompt, textFileContents].filter(Boolean);
-    const promptText = promptParts.join('\n\n') || '（請查看附件）';
+    const userPrompt = [prompt, textFileContents].filter(Boolean).join('\n\n') || '（請查看附件）';
+
+    // 頻道提示詞僅在開新 Thread 首輪對話時前置（續問不重複）
+    const promptText = [channelConfig.prompt, userPrompt].filter(Boolean).join('\n\n');
 
     // 非文字檔（圖片 + PDF）作為 content block 傳送
     const richAttachments = fileAttachments.filter((f) => f.type !== 'text');
+
+    // 模型與 Effort：頻道覆寫優先，未設定時 fallback 到全域預設
+    const model = channelConfig.model ?? deps.config.defaultModel;
+    const effort = channelConfig.effort ?? deps.config.defaultEffort;
 
     // 建立 Session
     const abortController = new AbortController();
@@ -84,8 +92,9 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
       startedAt: new Date(),
       lastActivityAt: new Date(),
       promptText,
-      cwd: deps.config.defaultCwd,
-      model: MENTION_MODEL,
+      cwd: channelConfig.path,
+      model,
+      effort,
       toolCount: 0,
       tools: {},
       pendingApproval: null,
@@ -101,9 +110,9 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
       content: (prompt || '（附件）').slice(0, 2000),
     });
 
-    // 發送開始 Embed
-    const startEmbed = buildSessionStartEmbed(promptText, deps.config.defaultCwd, MENTION_MODEL);
-    await sendInThread(thread, startEmbed);
+    // 發送開始 Embed（附帶 🛑 中斷請求按鈕）
+    const startEmbed = buildSessionStartEmbed(userPrompt, channelConfig.path, model, effort);
+    await sendInThreadWithComponents(thread, startEmbed, [buildStopButtonRow(thread.id)]);
 
     log.info(
       { threadId: thread.id, userId: message.author.id, prompt: truncate(promptText, 60) },

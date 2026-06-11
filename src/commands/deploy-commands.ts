@@ -3,24 +3,11 @@ import { config as loadEnv } from 'dotenv';
 import { logger } from '../effects/logger.js';
 
 const log = logger.child({ module: 'Deploy' });
-import { loadProjects } from '../config.js';
-import { buildPromptCommand } from './prompt.js';
-import { data as stopData } from './stop.js';
 import { data as statusData } from './status.js';
-import { data as historyData } from './history.js';
-import { data as retryData } from './retry.js';
 
 loadEnv();
 
-const projects = loadProjects();
-
-const commands = [
-  buildPromptCommand(projects).toJSON(),
-  stopData.toJSON(),
-  statusData.toJSON(),
-  historyData.toJSON(),
-  retryData.toJSON(),
-];
+const commands = [statusData.toJSON()];
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
