@@ -27,6 +27,7 @@ function makeSession(threadId: string, store: StateStore) {
     promptText: 'test',
     cwd: '/test',
     model: 'model',
+    effort: null,
     toolCount: 0,
     tools: {},
     pendingApproval: null,
@@ -354,7 +355,7 @@ describe('handleSDKMessage', () => {
   });
 
   describe('result', () => {
-    it('成功時發送統計 embed（不含回應文字）', async () => {
+    it('成功時不發送任何訊息或 embed，但仍記錄用量與 transcript', async () => {
       const deps = makeDeps(store, usageStore);
       const state = makeStreamState();
 
@@ -376,10 +377,21 @@ describe('handleSDKMessage', () => {
         state,
       );
 
-      expect(sendInThread).toHaveBeenCalledTimes(1);
-      const embed = vi.mocked(sendInThread).mock.calls[0][1] as Record<string, unknown>;
-      // 回應文字不包含在 description 中（已在 assistant 階段發送）
-      expect(embed.description).toBeUndefined();
+      // 成功結果不再發送統計 embed（回應文字已在 assistant 階段發送）
+      expect(sendInThread).not.toHaveBeenCalled();
+      expect(sendTextInThread).not.toHaveBeenCalled();
+      expect(sendPlainInThread).not.toHaveBeenCalled();
+
+      // 用量仍正常記錄
+      const stats = usageStore.getGlobalStats();
+      expect(stats.completedQueries).toBe(1);
+      expect(stats.totalCostUsd).toBeCloseTo(0.05);
+
+      // transcript 仍正常記錄
+      const session = store.getSession('t1');
+      expect(session?.transcript).toHaveLength(1);
+      expect(session?.transcript[0].type).toBe('result');
+      expect(session?.transcript[0].content).toBe('Done!');
     });
 
     it('失敗時發送錯誤 embed', async () => {

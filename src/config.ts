@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { BotConfig, PermissionMode, Project } from './types.js';
+import type { BotConfig, ChannelConfig, EffortLevel, PermissionMode } from './types.js';
 
 const VALID_PERMISSION_MODES: PermissionMode[] = [
   'default',
@@ -9,26 +9,27 @@ const VALID_PERMISSION_MODES: PermissionMode[] = [
   'plan',
 ];
 
+const VALID_EFFORT_LEVELS: EffortLevel[] = ['low', 'medium', 'high', 'max'];
+
 /**
  * 解析環境變數為 BotConfig 物件
  * @param env - 環境變數鍵值對
  * @returns 解析後的 Bot 設定
  */
 export function parseConfig(env: Record<string, string | undefined>): BotConfig {
-  const projects = loadProjects();
   return {
     discordToken: env.DISCORD_BOT_TOKEN ?? '',
     discordGuildId: env.DISCORD_GUILD_ID ?? '',
-    discordChannelId: env.DISCORD_CHANNEL_ID ?? '',
     allowedUserIds: parseCommaSeparated(env.ALLOWED_USER_IDS),
-    defaultCwd: env.DEFAULT_CWD || projects[0]?.path || process.cwd(),
     defaultModel: env.DEFAULT_MODEL ?? 'claude-opus-4-6',
+    // 直接保留原始字串（轉型），交由 validateConfig 驗證是否為合法值
+    defaultEffort: env.DEFAULT_EFFORT ? (env.DEFAULT_EFFORT as EffortLevel) : null,
     defaultPermissionMode: parsePermissionMode(env.DEFAULT_PERMISSION_MODE),
     maxMessageLength: 2000,
     streamUpdateIntervalMs: 2000,
     rateLimitWindowMs: safeParseInt(env.RATE_LIMIT_WINDOW_MS, 60_000),
     rateLimitMaxRequests: safeParseInt(env.RATE_LIMIT_MAX_REQUESTS, 5),
-    projects,
+    channels: loadChannels(),
   };
 }
 
@@ -46,17 +47,25 @@ export function validateConfig(config: BotConfig): string[] {
   if (!config.discordGuildId) {
     errors.push('DISCORD_GUILD_ID 未設定');
   }
-  if (!config.discordChannelId) {
-    errors.push('DISCORD_CHANNEL_ID 未設定');
-  }
   if (config.allowedUserIds.length === 0) {
     errors.push('ALLOWED_USER_IDS 未設定（至少需要一個允許的使用者 ID）');
   }
-  if (config.projects.length === 0) {
-    errors.push('projects.json 未設定或為空（至少需要一個專案）');
+  if (config.channels.length === 0) {
+    errors.push('channels.json 未設定或為空（至少需要一個頻道設定）');
   }
-  if (config.projects.length > 0 && !config.projects.some((p) => p.path === config.defaultCwd)) {
-    errors.push(`DEFAULT_CWD "${config.defaultCwd}" 不在 projects.json 的允許路徑中`);
+
+  const seenChannelIds = new Set<string>();
+  for (const channel of config.channels) {
+    if (seenChannelIds.has(channel.channelId)) {
+      errors.push(`channels.json 中的 channelId "${channel.channelId}" 重複`);
+    }
+    seenChannelIds.add(channel.channelId);
+  }
+
+  if (config.defaultEffort !== null && !VALID_EFFORT_LEVELS.includes(config.defaultEffort)) {
+    errors.push(
+      `DEFAULT_EFFORT "${config.defaultEffort}" 無效（必須為 low | medium | high | max）`,
+    );
   }
 
   return errors;
@@ -84,23 +93,42 @@ function parsePermissionMode(value: string | undefined): PermissionMode {
 }
 
 /**
- * 載入專案清單（projects.json）
- * @param filePath - 選填的檔案路徑（預設為 projects.json）
- * @returns 專案列表
+ * 載入頻道設定清單（channels.json）
+ * @param filePath - 選填的檔案路徑（預設為 channels.json）
+ * @returns 頻道設定列表（無效項目會被丟棄）
  */
-export function loadProjects(filePath?: string): Project[] {
-  const path = filePath ?? resolve(process.cwd(), 'projects.json');
+export function loadChannels(filePath?: string): ChannelConfig[] {
+  const path = filePath ?? resolve(process.cwd(), 'channels.json');
   try {
     const raw = readFileSync(path, 'utf-8');
-    const data = JSON.parse(raw) as unknown[];
-    return data.filter(
-      (item): item is Project =>
-        typeof item === 'object' &&
-        item !== null &&
-        typeof (item as Record<string, unknown>).name === 'string' &&
-        typeof (item as Record<string, unknown>).path === 'string',
-    );
+    const data = JSON.parse(raw) as unknown;
+    if (!Array.isArray(data)) return [];
+    return data.filter(isValidChannelConfig);
   } catch {
     return [];
   }
+}
+
+function isValidChannelConfig(item: unknown): item is ChannelConfig {
+  if (typeof item !== 'object' || item === null) return false;
+  const record = item as Record<string, unknown>;
+
+  const hasRequiredStrings = (['channelId', 'name', 'path'] as const).every(
+    (key) => typeof record[key] === 'string' && (record[key] as string).length > 0,
+  );
+  if (!hasRequiredStrings) return false;
+
+  const isOptionalString = (value: unknown): boolean =>
+    value === undefined || value === null || typeof value === 'string';
+  if (!isOptionalString(record.prompt) || !isOptionalString(record.model)) return false;
+
+  if (
+    record.effort !== undefined &&
+    record.effort !== null &&
+    !VALID_EFFORT_LEVELS.includes(record.effort as EffortLevel)
+  ) {
+    return false;
+  }
+
+  return true;
 }

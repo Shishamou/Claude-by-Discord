@@ -1,0 +1,15 @@
+[
+  {
+    "channelId": "123456789012345678",
+    "name": "my-project",
+    "path": "/Users/you/GitHub/my-project",
+    "prompt": "你是 my-project 專案助手，回覆請使用正體中文，修改程式碼前先閱讀 CLAUDE.md。",
+    "model": "claude-sonnet-4-5-20250929",
+    "effort": "high"
+  },
+  {
+    "channelId": "234567890123456789",
+    "name": "another-project",
+    "path": "/Users/you/GitHub/another-project"
+  }
+]

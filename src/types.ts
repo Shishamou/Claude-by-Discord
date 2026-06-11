@@ -1,11 +1,21 @@
 import type { APIEmbed, APIActionRowComponent, APIButtonComponent } from 'discord.js';
 
-// ─── 專案清單 ────────────────────────────────────────
+// ─── 頻道設定 ────────────────────────────────────────
 
-/** 專案定義，對應 `projects.json` 中的一筆白名單項目 */
-export interface Project {
+/** Claude Code 推理深度（effort），透過 CLAUDE_CODE_EFFORT_LEVEL 環境變數傳遞 */
+export type EffortLevel = 'low' | 'medium' | 'high' | 'max';
+
+/** 頻道設定，對應 `channels.json` 中的一筆項目（每個 Discord 頻道對應一個工作目錄） */
+export interface ChannelConfig {
+  channelId: string;
   name: string;
   path: string;
+  /** 開新 Thread 首輪對話時前置的提示詞（續問不重複） */
+  prompt?: string | null;
+  /** 模型覆寫，null/未設定時 fallback 到 defaultModel */
+  model?: string | null;
+  /** Effort 覆寫，null/未設定時 fallback 到 defaultEffort */
+  effort?: EffortLevel | null;
 }
 
 // ─── 設定 ───────────────────────────────────────────
@@ -19,20 +29,19 @@ export interface Project {
  */
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 
-/** Bot 全域設定，由環境變數與 `projects.json` 組合產生 */
+/** Bot 全域設定，由環境變數與 `channels.json` 組合產生 */
 export interface BotConfig {
   discordToken: string;
   discordGuildId: string;
-  discordChannelId: string;
   allowedUserIds: string[];
-  defaultCwd: string;
   defaultModel: string;
+  defaultEffort: EffortLevel | null;
   defaultPermissionMode: PermissionMode;
   maxMessageLength: number;
   streamUpdateIntervalMs: number;
   rateLimitWindowMs: number;
   rateLimitMaxRequests: number;
-  projects: Project[];
+  channels: ChannelConfig[];
 }
 
 // ─── Session ────────────────────────────────────────
@@ -57,6 +66,7 @@ export interface SessionState {
   promptText: string;
   cwd: string;
   model: string;
+  effort: EffortLevel | null;
   toolCount: number;
   tools: Record<string, number>;
   pendingApproval: PendingApproval | null;

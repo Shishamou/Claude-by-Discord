@@ -8,7 +8,6 @@ import type { UsageStore } from '../effects/usage-store.js';
 import { sendInThread, sendPlainInThread, editMessageText, sendTextInThread } from '../effects/discord-sender.js';
 import {
   buildToolUseEmbed,
-  buildResultEmbed,
   buildErrorEmbed,
 } from '../modules/embeds.js';
 import { extractAssistantText, extractToolUse, extractResult } from '../modules/message-parser.js';
@@ -220,9 +219,6 @@ export async function handleSDKMessage(
     case 'result': {
       const result = extractResult(message);
       const session = store.getSession(threadId);
-      const stats = session
-        ? { toolCount: session.toolCount, tools: session.tools }
-        : { toolCount: 0, tools: {} };
 
       const usage = calculateTokenUsage(result.usage);
 
@@ -239,10 +235,8 @@ export async function handleSDKMessage(
       deps.usageStore.recordResult(threadId, usage, result.costUsd, result.durationMs);
 
       if (result.success) {
+        // 成功時不再發送統計 embed，回應文字已在 assistant 訊息中發送
         log.info({ threadId, tokens: usage, cost: result.costUsd, durationMs: result.durationMs }, '收到結果');
-        // 回應文字已在 assistant 訊息中發送，這裡只發統計摘要
-        const embed = buildResultEmbed('', stats, usage, result.durationMs, result.costUsd);
-        await sendInThread(thread, embed);
       } else {
         log.warn({ threadId, error: truncate(result.text || '', 100) }, '收到錯誤結果');
         const embed = buildErrorEmbed(result.text || '執行過程中發生錯誤');
