@@ -13,7 +13,7 @@ import {
 } from '../modules/embeds.js';
 import { extractAssistantText, extractToolUse, extractResult } from '../modules/message-parser.js';
 import { calculateTokenUsage } from '../modules/token-usage.js';
-import { truncate } from '../modules/formatters.js';
+import { truncate, formatForDiscord } from '../modules/formatters.js';
 
 /** 串流處理器的依賴注入介面 */
 export interface StreamHandlerDeps {
@@ -165,13 +165,14 @@ export async function handleSDKMessage(
       }
 
       if (text) {
-        if (text.length <= 2000 && streamState.currentMessage) {
+        const formatted = formatForDiscord(text);
+        if (formatted.length <= 2000 && streamState.currentMessage) {
           // 文字在 2000 字以內，直接編輯串流訊息
           try {
-            await editMessageText(streamState.currentMessage, text);
+            await editMessageText(streamState.currentMessage, formatted);
           } catch {
             // 編輯失敗則重新發送
-            await sendTextInThread(thread, text);
+            await sendTextInThread(thread, formatted);
           }
         } else {
           // 文字超過 2000 字或無串流訊息，刪除串流訊息後分段發送
@@ -182,7 +183,7 @@ export async function handleSDKMessage(
               // 訊息可能已被刪除
             }
           }
-          await sendTextInThread(thread, text);
+          await sendTextInThread(thread, formatted);
         }
       }
 

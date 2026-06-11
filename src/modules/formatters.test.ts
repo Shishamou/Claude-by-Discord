@@ -8,6 +8,8 @@ import {
   formatCodeBlock,
   formatDuration,
   formatCost,
+  convertMarkdownTables,
+  formatForDiscord,
 } from './formatters.js';
 
 describe('truncate', () => {
@@ -171,5 +173,105 @@ describe('formatCost', () => {
 
   it('補零到四位', () => {
     expect(formatCost(1)).toBe('$1.0000');
+  });
+});
+
+describe('convertMarkdownTables', () => {
+  it('將 Markdown 表格轉為 code block', () => {
+    const input = [
+      '| Name | Age |',
+      '| --- | --- |',
+      '| Alice | 30 |',
+      '| Bob | 25 |',
+    ].join('\n');
+    const result = convertMarkdownTables(input);
+    expect(result).toContain('```');
+    expect(result).toContain('Alice');
+    expect(result).toContain('Bob');
+    // 不再包含 | 分隔符
+    const lines = result.split('\n').filter((l) => !l.startsWith('```'));
+    for (const line of lines) {
+      expect(line).not.toMatch(/^\|/);
+    }
+  });
+
+  it('保留非表格文字不變', () => {
+    const input = 'Hello world\nThis is normal text';
+    expect(convertMarkdownTables(input)).toBe(input);
+  });
+
+  it('混合表格與一般文字', () => {
+    const input = [
+      'Before text',
+      '| Col1 | Col2 |',
+      '| --- | --- |',
+      '| A | B |',
+      'After text',
+    ].join('\n');
+    const result = convertMarkdownTables(input);
+    expect(result).toContain('Before text');
+    expect(result).toContain('After text');
+    expect(result).toContain('```');
+  });
+
+  it('處理全形字元對齊', () => {
+    const input = [
+      '| 名稱 | 數值 |',
+      '| --- | --- |',
+      '| 測試 | 100 |',
+    ].join('\n');
+    const result = convertMarkdownTables(input);
+    expect(result).toContain('```');
+    expect(result).toContain('名稱');
+    expect(result).toContain('測試');
+  });
+
+  it('單行 | 不視為表格', () => {
+    const input = '| single line |';
+    const result = convertMarkdownTables(input);
+    // 只有一行不算有效表格
+    expect(result).toBe(input);
+  });
+
+  it('多個表格分別轉換', () => {
+    const input = [
+      '| A | B |',
+      '| --- | --- |',
+      '| 1 | 2 |',
+      '',
+      'Some text',
+      '',
+      '| X | Y |',
+      '| --- | --- |',
+      '| 3 | 4 |',
+    ].join('\n');
+    const result = convertMarkdownTables(input);
+    const codeBlockCount = (result.match(/```/g) || []).length;
+    expect(codeBlockCount).toBe(4); // 2 個表格，各有開閉 ```
+  });
+
+  it('過濾分隔線行', () => {
+    const input = [
+      '| Header1 | Header2 |',
+      '| :--- | ---: |',
+      '| val1 | val2 |',
+    ].join('\n');
+    const result = convertMarkdownTables(input);
+    // 分隔線不應出現在輸出中
+    expect(result).not.toContain(':---');
+    expect(result).not.toContain('---:');
+  });
+});
+
+describe('formatForDiscord', () => {
+  it('呼叫 convertMarkdownTables', () => {
+    const input = '| A | B |\n| --- | --- |\n| 1 | 2 |';
+    const result = formatForDiscord(input);
+    expect(result).toContain('```');
+  });
+
+  it('無表格時原樣回傳', () => {
+    const input = 'Hello world';
+    expect(formatForDiscord(input)).toBe(input);
   });
 });
