@@ -9,7 +9,6 @@ import {
   buildSessionStartEmbed,
   buildStopButtonRow,
   buildStopConfirmEmbed,
-  buildStopPreviewEmbed,
   buildNotificationEmbed,
   buildFollowUpEmbed,
   buildMultiStatusEmbed,
@@ -213,19 +212,6 @@ describe('buildStopButtonRow', () => {
     const button = row.toJSON().components[0] as { style: number; emoji?: { name?: string } };
     expect(button.style).toBe(4); // ButtonStyle.Danger
     expect(button.emoji?.name).toBe('🛑');
-  });
-});
-
-describe('buildStopPreviewEmbed', () => {
-  it('顯示確認中斷', () => {
-    const embed = buildStopPreviewEmbed(makeSession({ toolCount: 5, tools: { Read: 3, Write: 2 } }), 10_000);
-    expect(embed.title).toContain('中斷');
-    expect(embed.fields?.some((f) => f.value.includes('Read'))).toBe(true);
-  });
-
-  it('無工具時顯示「尚無」', () => {
-    const embed = buildStopPreviewEmbed(makeSession(), 1000);
-    expect(embed.fields?.some((f) => f.value === '尚無')).toBe(true);
   });
 });
 

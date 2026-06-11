@@ -8,7 +8,6 @@ import { truncate, formatDuration } from './modules/formatters.js';
 const log = logger.child({ module: 'Bot' });
 const claudeLog = logger.child({ module: 'Claude' });
 import { StateStore } from './effects/state-store.js';
-import { RateLimitStore } from './effects/rate-limit-store.js';
 import { createDiscordClient, destroyDiscordClient } from './effects/discord-client.js';
 import { createInteractionHandler } from './handlers/interaction-handler.js';
 import { startQuery } from './effects/claude-bridge.js';
@@ -36,7 +35,6 @@ async function main() {
 
   // 建立狀態儲存
   const store = new StateStore();
-  const rateLimitStore = new RateLimitStore();
   const usageStore = new UsageStore();
 
   // Claude 查詢啟動函式
@@ -134,8 +132,6 @@ async function main() {
     get client() {
       return client;
     },
-    startClaudeQuery,
-    rateLimitStore,
     usageStore,
   });
 

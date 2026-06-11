@@ -124,44 +124,6 @@ export function buildStreamingTextEmbed(
   };
 }
 
-// ─── 中斷預覽 Embed ─────────────────────────────────
-
-/**
- * 建構中斷預覽 Embed（確認前顯示進度摘要）
- * @param session - 目前的 Session 狀態
- * @param durationMs - 已執行的時間（毫秒）
- * @returns 中斷預覽 Embed
- */
-export function buildStopPreviewEmbed(
-  session: SessionState,
-  durationMs: number,
-): APIEmbed {
-  const toolList = Object.entries(session.tools)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([name, count]) => `${TOOL_EMOJI[name] || '🔧'} ${name}: **${count}**`)
-    .join('\n');
-
-  const statusName = SESSION_STATUS_NAMES[session.status];
-
-  return {
-    color: COLORS.Notification,
-    author: { name: '⚠️ 確認中斷' },
-    title: '確定要中斷此任務？',
-    description: truncate(session.promptText, 200),
-    fields: [
-      { name: '目前狀態', value: statusName, inline: true },
-      { name: '執行時間', value: formatDuration(durationMs), inline: true },
-      {
-        name: `工具統計（共 ${session.toolCount} 次）`,
-        value: toolList || '尚無',
-        inline: false,
-      },
-    ],
-    timestamp: new Date().toISOString(),
-  };
-}
-
 // ─── 錯誤 Embed ─────────────────────────────────────
 
 /**

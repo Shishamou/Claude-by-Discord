@@ -31,6 +31,7 @@ function makeSession(threadId: string): SessionState {
     promptText: 'test',
     cwd: '/test',
     model: 'model',
+    effort: null,
     toolCount: 0,
     tools: {},
     pendingApproval: null,
@@ -84,7 +85,7 @@ function makePendingApproval(askState: AskState, resolve?: (result: unknown) => 
 function makeButtonInteraction(overrides?: Record<string, unknown>) {
   return {
     reply: vi.fn().mockResolvedValue(undefined),
-    update: vi.fn().mockResolvedValue(undefined),
+    editReply: vi.fn().mockResolvedValue(undefined),
     isButton: () => true,
     ...overrides,
   } as unknown;
@@ -93,6 +94,7 @@ function makeButtonInteraction(overrides?: Record<string, unknown>) {
 function makeModalInteraction(answerText = '自訂回答') {
   return {
     reply: vi.fn().mockResolvedValue(undefined),
+    editReply: vi.fn().mockResolvedValue(undefined),
     isButton: () => false,
     fields: {
       getTextInputValue: vi.fn().mockReturnValue(answerText),
@@ -118,7 +120,7 @@ describe('handleAskOptionClick', () => {
   it('無 pending 時回覆過期訊息', async () => {
     const interaction = makeButtonInteraction();
     await handleAskOptionClick(interaction as never, 'thread-1', 0, 0, { store });
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: '⚠️ 此請求已過期' }),
     );
   });
@@ -131,7 +133,7 @@ describe('handleAskOptionClick', () => {
     const interaction = makeButtonInteraction();
     // 目前在 qIdx 0，傳入 qIdx 1
     await handleAskOptionClick(interaction as never, 't1', 1, 0, { store });
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: '⚠️ 此選項已過期' }),
     );
   });
@@ -145,8 +147,8 @@ describe('handleAskOptionClick', () => {
     await handleAskOptionClick(interaction as never, 't1', 0, 1, { store });
 
     expect(askState.collectedAnswers['0']).toBe('B');
-    // 前進到下一題，update 應被呼叫
-    expect((interaction as Record<string, unknown>).update).toHaveBeenCalled();
+    // 前進到下一題，editReply 應被呼叫（按鈕互動已預先 defer）
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalled();
   });
 
   it('多選時 toggle 選中狀態', async () => {
@@ -193,7 +195,7 @@ describe('handleAskSubmit', () => {
   it('無 pending 時回覆過期訊息', async () => {
     const interaction = makeButtonInteraction();
     await handleAskSubmit(interaction as never, 't1', 0, { store });
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: '⚠️ 此請求已過期' }),
     );
   });
@@ -205,7 +207,7 @@ describe('handleAskSubmit', () => {
 
     const interaction = makeButtonInteraction();
     await handleAskSubmit(interaction as never, 't1', 0, { store });
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: '⚠️ 請至少選擇一個選項' }),
     );
   });
@@ -230,7 +232,7 @@ describe('handleAskSubmit', () => {
 
     const interaction = makeButtonInteraction();
     await handleAskSubmit(interaction as never, 't1', 5, { store });
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: '⚠️ 此選項已過期' }),
     );
   });
@@ -286,7 +288,7 @@ describe('handleAskModalSubmit', () => {
   it('無 pending 時回覆過期訊息', async () => {
     const interaction = makeModalInteraction();
     await handleAskModalSubmit(interaction as never, 't1', 0, { store });
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: '⚠️ 此請求已過期' }),
     );
   });
@@ -298,7 +300,7 @@ describe('handleAskModalSubmit', () => {
 
     const interaction = makeModalInteraction();
     await handleAskModalSubmit(interaction as never, 't1', 99, { store });
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
+    expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: '⚠️ 此選項已過期' }),
     );
   });
