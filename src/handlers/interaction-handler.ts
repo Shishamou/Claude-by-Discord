@@ -3,6 +3,7 @@ import type { BotConfig } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import * as statusCmd from '../commands/status.js';
 import { executeStop, buildStopConfirmRow } from '../commands/stop.js';
+import { isUserAuthorized } from '../modules/permissions.js';
 import type { UsageStore } from '../effects/usage-store.js';
 import {
   handleAskOptionClick,
@@ -86,7 +87,13 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
       }
 
       // 中斷請求 → 顯示確認/取消按鈕（discord-client.ts 已預先 deferReply）
+      // 🛑 按鈕掛在 Thread 內的公開訊息上，必須驗證使用者授權
       if (customId.startsWith('stop_request:')) {
+        if (!isUserAuthorized(interaction.user.id, deps.config.allowedUserIds)) {
+          await interaction.editReply({ content: '❌ 你沒有權限執行此操作' });
+          return;
+        }
+
         const threadId = customId.slice('stop_request:'.length);
         const session = deps.store.getSession(threadId);
 
@@ -104,6 +111,11 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
 
       // 確認中斷（discord-client.ts 已預先 deferReply）
       if (customId.startsWith('confirm_stop:')) {
+        if (!isUserAuthorized(interaction.user.id, deps.config.allowedUserIds)) {
+          await interaction.editReply({ content: '❌ 你沒有權限執行此操作' });
+          return;
+        }
+
         const threadId = customId.slice('confirm_stop:'.length);
         const session = deps.store.getSession(threadId);
 

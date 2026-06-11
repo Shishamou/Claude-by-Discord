@@ -261,6 +261,34 @@ describe('convertMarkdownTables', () => {
     expect(result).not.toContain(':---');
     expect(result).not.toContain('---:');
   });
+
+  it('code block 內的管線分隔行原樣保留', () => {
+    const input = [
+      '```sql',
+      '| id | name |',
+      '| --- | --- |',
+      '| 1 | a |',
+      '```',
+    ].join('\n');
+    expect(convertMarkdownTables(input)).toBe(input);
+  });
+
+  it('code block 外的表格照常轉換、fence 內不受影響', () => {
+    const input = [
+      '```',
+      '| raw | pipe |',
+      '```',
+      '| A | B |',
+      '| --- | --- |',
+      '| 1 | 2 |',
+    ].join('\n');
+    const result = convertMarkdownTables(input);
+    // fence 內容原樣保留
+    expect(result).toContain('| raw | pipe |');
+    // fence 外的表格已轉換
+    expect(result).toContain('A  B');
+    expect(result).not.toContain('| A | B |');
+  });
 });
 
 describe('formatForDiscord', () => {

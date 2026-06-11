@@ -77,12 +77,13 @@ function makeSlashInteraction(commandName: string) {
   } as unknown;
 }
 
-function makeButtonInteraction(customId: string) {
+function makeButtonInteraction(customId: string, userId = 'user1') {
   return {
     isChatInputCommand: () => false,
     isButton: () => true,
     isModalSubmit: () => false,
     customId,
+    user: { id: userId },
     reply: vi.fn().mockResolvedValue(undefined),
     editReply: vi.fn().mockResolvedValue(undefined),
   } as unknown;
@@ -252,6 +253,36 @@ describe('createInteractionHandler', () => {
         expect.objectContaining({ content: '⚠️ 此任務已結束' }),
       );
       expect(executeStop).not.toHaveBeenCalled();
+    });
+
+    it('stop_request 未授權使用者被拒絕', async () => {
+      const store = new StateStore();
+      store.setSession('t1', makeSession('t1'));
+
+      const deps = makeDeps(store);
+      const handler = createInteractionHandler(deps);
+      const interaction = makeButtonInteraction('stop_request:t1', 'intruder');
+      await handler(interaction as never);
+
+      expect(buildStopConfirmRow).not.toHaveBeenCalled();
+      expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
+        expect.objectContaining({ content: '❌ 你沒有權限執行此操作' }),
+      );
+    });
+
+    it('confirm_stop 未授權使用者被拒絕', async () => {
+      const store = new StateStore();
+      store.setSession('t1', makeSession('t1'));
+
+      const deps = makeDeps(store);
+      const handler = createInteractionHandler(deps);
+      const interaction = makeButtonInteraction('confirm_stop:t1', 'intruder');
+      await handler(interaction as never);
+
+      expect(executeStop).not.toHaveBeenCalled();
+      expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
+        expect.objectContaining({ content: '❌ 你沒有權限執行此操作' }),
+      );
     });
 
     it('cancel_stop 回覆已取消', async () => {

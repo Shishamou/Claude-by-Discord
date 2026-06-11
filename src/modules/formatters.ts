@@ -195,8 +195,19 @@ export function convertMarkdownTables(text: string): string {
     tableLines = [];
   };
 
+  // 追蹤 ``` fence 狀態，code block 內的內容不做表格轉換
+  let inFence = false;
   for (const line of lines) {
-    if (isTableRow(line)) {
+    if (line.trimStart().startsWith('```')) {
+      if (inTable) {
+        flushTable();
+        inTable = false;
+      }
+      inFence = !inFence;
+      result.push(line);
+      continue;
+    }
+    if (!inFence && isTableRow(line)) {
       if (!inTable) inTable = true;
       tableLines.push(line);
     } else {

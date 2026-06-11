@@ -145,7 +145,7 @@ async function main() {
     startClaudeQuery,
   });
 
-  // 建立 @mention 處理器（在頻道 @ Bot 自動以 Haiku 開啟對話）
+  // 建立 @mention 處理器（在頻道 @ Bot 自動開啟對話，模型依頻道設定 channelConfig.model，未設定時用 defaultModel）
   const mentionHandler = createMentionHandler({
     config,
     store,
