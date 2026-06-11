@@ -12,6 +12,8 @@ export interface ChannelConfig {
   path: string;
   /** 開新 Thread 首輪對話時前置的提示詞（續問不重複） */
   prompt?: string | null;
+  /** /help 顯示的 markdown 文件路徑（相對路徑以 path 為基準），未設定時顯示內建說明 */
+  help?: string | null;
   /** 模型覆寫，null/未設定時 fallback 到 defaultModel */
   model?: string | null;
   /** Effort 覆寫，null/未設定時 fallback 到 defaultEffort */

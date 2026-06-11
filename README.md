@@ -123,6 +123,7 @@ cp channels.example.json channels.json
     "name": "my-project",
     "path": "/path/to/my-project",
     "prompt": "你是 my-project 專案助手，回覆請使用正體中文。",
+    "help": "docs/BOT_HELP.md",
     "model": "claude-sonnet-4-5-20250929",
     "effort": "high"
   },
@@ -140,6 +141,7 @@ cp channels.example.json channels.json
 | `name` | 顯示名稱（啟動 banner 與日誌用） | 是 |
 | `path` | 從此頻道啟動的 Claude Code Session 的工作目錄（cwd） | 是 |
 | `prompt` | 頻道提示詞。**僅在開新 Thread 的首輪對話**前置於使用者訊息之前；Thread 內續問不會重複前置。`null` 或省略表示不使用 | 否 |
+| `help` | `/help` 顯示的 markdown 文件路徑。相對路徑以 `path` 為基準（如 `docs/BOT_HELP.md`），也可用絕對路徑；每次執行 `/help` 都會重新讀取。`null` 或省略時顯示內建說明（頻道資訊＋使用方式） | 否 |
 | `model` | 此頻道的模型覆寫。`null` 或省略則 fallback 到 `DEFAULT_MODEL` | 否 |
 | `effort` | 此頻道的推理深度覆寫（`low` / `medium` / `high` / `max`）。`null` 或省略則 fallback 到 `DEFAULT_EFFORT`；兩者皆未設定則交由 CLI 預設 | 否 |
 
@@ -159,7 +161,7 @@ pnpm dev
 
 ### 開始任務
 
-在 `channels.json` 設定的頻道中 @ 標注 Bot 並描述任務：
+在 `channels.json` 設定的頻道中 @ 標注 Bot 並描述任務（必須**直接 @ Bot 本人**——`@everyone`、@身分組、回覆 Bot 訊息都不會觸發）：
 
 ```text
 @ClaudeBot 修好登入頁面的 CSS 問題
@@ -194,11 +196,10 @@ Claude 使用 `AskUserQuestion` 提問時，Bot 顯示選項按鈕。支援單�
 
 ### Slash 指令
 
-唯一保留的 Slash 指令：
-
 | 指令 | 說明 |
 | ------ | ------ |
 | `/status` | 查看執行狀態與 Token 統計 |
+| `/help` | 顯示頻道的使用說明（頻道設定 `help` 文件，未設定時為內建說明） |
 
 ## 安全模型
 

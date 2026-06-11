@@ -200,12 +200,21 @@ describe('loadChannels', () => {
     expect(channels[0].channelId).toBe('ch2');
   });
 
-  it('丟棄 prompt/model 型別錯誤的項目', () => {
+  it('丟棄 prompt/help/model 型別錯誤的項目', () => {
     const path = writeTmpJson('bad-optional.json', [
       { channelId: 'ch1', name: 'a', path: '/a', prompt: 123 },
       { channelId: 'ch2', name: 'b', path: '/b', model: ['x'] },
+      { channelId: 'ch3', name: 'c', path: '/c', help: 42 },
     ]);
     expect(loadChannels(path)).toEqual([]);
+  });
+
+  it('help 為字串或 null 視為有效', () => {
+    const path = writeTmpJson('help-field.json', [
+      { channelId: 'ch1', name: 'a', path: '/a', help: 'docs/HELP.md' },
+      { channelId: 'ch2', name: 'b', path: '/b', help: null },
+    ]);
+    expect(loadChannels(path).length).toBe(2);
   });
 
   it('檔案不存在回傳空陣列', () => {

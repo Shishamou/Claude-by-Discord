@@ -2,6 +2,7 @@ import { MessageFlags, type Interaction, type Client } from 'discord.js';
 import type { BotConfig } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import * as statusCmd from '../commands/status.js';
+import * as helpCmd from '../commands/help.js';
 import { executeEnd } from '../commands/stop.js';
 import type { UsageStore } from '../effects/usage-store.js';
 import {
@@ -36,6 +37,10 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
       switch (interaction.commandName) {
         case 'status':
           await statusCmd.execute(interaction, deps.config, deps.store, deps.usageStore);
+          break;
+
+        case 'help':
+          await helpCmd.execute(interaction, deps.config);
           break;
 
         default:

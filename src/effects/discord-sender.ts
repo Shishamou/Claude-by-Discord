@@ -253,23 +253,6 @@ export async function sendInThread(
 }
 
 /**
- * 發送 Embed 與按鈕列到 Thread，若已封存會自動解除
- *
- * @param thread - 目標 Thread
- * @param embed - 要發送的 Embed 物件
- * @param components - 預先建構的按鈕列陣列
- * @returns 發送後的 Discord 訊息
- */
-export async function sendInThreadWithComponents(
-  thread: ThreadChannel,
-  embed: APIEmbed,
-  components: ActionRowBuilder<ButtonBuilder>[],
-): Promise<Message> {
-  if (thread.archived) await thread.setArchived(false);
-  return thread.send({ embeds: [embed], components });
-}
-
-/**
  * 發送文字到 Thread，超過長度限制時自動切分為多則訊息
  *
  * @param thread - 目標 Thread

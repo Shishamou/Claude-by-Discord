@@ -44,16 +44,18 @@ export async function executeEnd(
   const session = store.getSession(threadId);
   if (!session) return;
 
-  // 中斷執行
-  session.abortController.abort();
-
-  // 如有待審批，自動拒絕
+  // 如有待審批，自動拒絕（需在 clearSession 前，resolvePendingApproval 會查 store）
   if (session.pendingApproval) {
     store.resolvePendingApproval(threadId, {
       behavior: 'deny',
       message: '使用者已中止任務',
     });
   }
+
+  // 先從 store 移除再 abort：abort 會觸發 claude-bridge 的 onComplete，
+  // onComplete 查不到 session 就不會補發「任務完成」通知或解除封存
+  store.clearSession(threadId);
+  session.abortController.abort();
 
   // 發送中止通知 + 還原指令到 Thread，然後封存
   try {
@@ -77,6 +79,4 @@ export async function executeEnd(
   } catch (err) {
     log.warn({ err, threadId }, '發送中止通知失敗（非致命）');
   }
-
-  store.clearSession(threadId);
 }

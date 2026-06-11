@@ -34,9 +34,18 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
     if (message.channel.isThread()) return;
     if (message.channel.type !== ChannelType.GuildText) return;
 
-    // 確認 Bot 有被 @ 標注
+    // 確認 Bot 有被「直接」@ 標注：@everyone、@身分組、回覆 Bot 訊息都不算
     const botUser = deps.client.user;
-    if (!botUser || !message.mentions.has(botUser)) return;
+    if (
+      !botUser ||
+      !message.mentions.has(botUser, {
+        ignoreEveryone: true,
+        ignoreRoles: true,
+        ignoreRepliedUser: true,
+      })
+    ) {
+      return;
+    }
 
     // 解析頻道設定，未設定的頻道一律靜默忽略
     const channelConfig = resolveChannelConfig(message.channel.id, null, deps.config.channels);

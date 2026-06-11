@@ -4,6 +4,7 @@
     "name": "my-project",
     "path": "/Users/you/GitHub/my-project",
     "prompt": "你是 my-project 專案助手，回覆請使用正體中文，修改程式碼前先閱讀 CLAUDE.md。",
+    "help": "docs/BOT_HELP.md",
     "model": "claude-sonnet-4-5-20250929",
     "effort": "high"
   },

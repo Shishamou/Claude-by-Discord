@@ -108,7 +108,13 @@ function isValidChannelConfig(item: unknown): item is ChannelConfig {
 
   const isOptionalString = (value: unknown): boolean =>
     value === undefined || value === null || typeof value === 'string';
-  if (!isOptionalString(record.prompt) || !isOptionalString(record.model)) return false;
+  if (
+    !isOptionalString(record.prompt) ||
+    !isOptionalString(record.help) ||
+    !isOptionalString(record.model)
+  ) {
+    return false;
+  }
 
   if (
     record.effort !== undefined &&

@@ -4,10 +4,11 @@ import { logger } from '../effects/logger.js';
 
 const log = logger.child({ module: 'Deploy' });
 import { data as statusData } from './status.js';
+import { data as helpData } from './help.js';
 
 loadEnv();
 
-const commands = [statusData.toJSON()];
+const commands = [statusData.toJSON(), helpData.toJSON()];
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
