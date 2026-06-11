@@ -2,9 +2,9 @@ import { ChannelType, ThreadAutoArchiveDuration, type Message, type Client } fro
 import type { BotConfig, SessionState } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import { logger } from '../effects/logger.js';
-import { isUserAuthorized, resolveChannelConfig } from '../modules/permissions.js';
-import { buildSessionStartEmbed, buildErrorEmbed, buildStopButtonRow } from '../modules/embeds.js';
-import { sendInThread, sendInThreadWithComponents } from '../effects/discord-sender.js';
+import { resolveChannelConfig } from '../modules/permissions.js';
+import { buildErrorEmbed } from '../modules/embeds.js';
+import { sendInThread } from '../effects/discord-sender.js';
 import { truncate } from '../modules/formatters.js';
 import { downloadAttachments } from './thread-message-handler.js';
 
@@ -23,7 +23,7 @@ export interface MentionHandlerDeps {
  *
  * 當 Bot 在已設定的文字頻道（channels.json）被 @ 標注時，自動建立 Thread 並開始對話。
  * 工作目錄、模型與 Effort 取自頻道設定，未覆寫時 fallback 到全域預設值。
- * 僅處理非 Thread 的 GuildText 頻道，並驗證使用者是否在授權名單中。
+ * 存取控制改由 Discord 頻道權限把關，不再檢查使用者白名單。
  */
 export function createMentionHandler(deps: MentionHandlerDeps) {
   return async function handleMentionMessage(message: Message): Promise<void> {
@@ -41,9 +41,6 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
     // 解析頻道設定，未設定的頻道一律靜默忽略
     const channelConfig = resolveChannelConfig(message.channel.id, null, deps.config.channels);
     if (!channelConfig) return;
-
-    // 檢查使用者授權
-    if (!isUserAuthorized(message.author.id, deps.config.allowedUserIds)) return;
 
     // 去除 @mention 標注後取得純文字
     const prompt = message.content.replace(`<@${botUser.id}>`, '').trim();
@@ -110,16 +107,12 @@ export function createMentionHandler(deps: MentionHandlerDeps) {
       content: (prompt || '（附件）').slice(0, 2000),
     });
 
-    // 發送開始 Embed（附帶 🛑 中斷請求按鈕）
-    const startEmbed = buildSessionStartEmbed(userPrompt, channelConfig.path, model, effort);
-    await sendInThreadWithComponents(thread, startEmbed, [buildStopButtonRow(thread.id)]);
-
     log.info(
       { threadId: thread.id, userId: message.author.id, prompt: truncate(promptText, 60) },
       '@mention 查詢開始',
     );
 
-    // 啟動查詢（非同步，不 await）
+    // 啟動查詢（非同步，不 await）— 不發送 Session 開始訊息，直接等 Claude 回應串流
     deps.startClaudeQuery(session, thread.id).catch(async (error) => {
       log.error({ err: error, threadId: thread.id }, '@mention 查詢錯誤');
       try {

@@ -15,6 +15,7 @@ import { createMessageHandler } from './handlers/stream-handler.js';
 import { createCanUseTool } from './handlers/permission-handler.js';
 import { buildErrorEmbed, buildOrphanCleanupEmbed } from './modules/embeds.js';
 import { sendInThread } from './effects/discord-sender.js';
+import { buildEndButtonRow, executeEnd } from './commands/stop.js';
 import { createThreadMessageHandler } from './handlers/thread-message-handler.js';
 import { createMentionHandler } from './handlers/mention-handler.js';
 import { UsageStore } from './effects/usage-store.js';
@@ -22,6 +23,11 @@ import { checkClaudeStatus } from './effects/startup-check.js';
 
 // 載入 .env
 loadEnv();
+
+/** Thread 閒置自動中止的門檻（30 分鐘無新對話） */
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+/** 閒置檢查的輪詢間隔 */
+const IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
 
 async function main() {
   // 解析與驗證設定
@@ -106,11 +112,14 @@ async function main() {
         store.updateSession(threadId, { status: 'waiting_input' });
 
         try {
-          // 純文字完成通知（@mention 使用者）
+          // 純文字完成通知（@mention 使用者）+ 中止按鈕
           const currentSession = store.getSession(threadId);
           if (currentSession?.userId) {
             if (thread.archived) await thread.setArchived(false);
-            await thread.send(`✅ <@${currentSession.userId}> 任務完成，可在此 Thread 繼續對話。`);
+            await thread.send({
+              content: `✅ <@${currentSession.userId}> 任務完成，可在此 Thread 繼續對話。`,
+              components: [buildEndButtonRow(threadId)],
+            });
           }
         } catch {
           // Thread 可能已不存在
@@ -160,6 +169,20 @@ async function main() {
     await mentionHandler(message);
     await threadMessageHandler(message);
   });
+
+  // 閒置 Thread 自動中止：每分鐘掃描，超過 30 分鐘無新對話即中止並印出還原指令
+  const idleSweep = setInterval(() => {
+    const now = Date.now();
+    for (const [threadId, session] of store.getAllActiveSessions()) {
+      if (now - session.lastActivityAt.getTime() >= IDLE_TIMEOUT_MS) {
+        log.info({ threadId }, '閒置逾時，自動中止');
+        executeEnd(threadId, store, client, '閒置逾 30 分鐘，自動中止').catch((err) =>
+          log.warn({ err, threadId }, '自動中止失敗'),
+        );
+      }
+    }
+  }, IDLE_SWEEP_INTERVAL_MS);
+  idleSweep.unref();
 
   // 啟動時清理孤兒 Thread（遍歷所有已設定的頻道）
   for (const channelConfig of config.channels) {
@@ -259,6 +282,8 @@ async function main() {
   // 優雅關閉
   function shutdown() {
     log.info('收到關閉訊號，正在關閉...');
+
+    clearInterval(idleSweep);
 
     // 中斷所有活躍 Session
     const activeSessions = store.getAllActiveSessions();

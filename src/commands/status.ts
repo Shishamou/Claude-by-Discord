@@ -26,7 +26,7 @@ export async function execute(
   usageStore: UsageStore,
 ): Promise<void> {
   const parentId = interaction.channel && 'parentId' in interaction.channel ? interaction.channel.parentId : null;
-  const auth = canExecuteCommand(interaction.user.id, interaction.channelId, config, parentId);
+  const auth = canExecuteCommand(interaction.channelId, config, parentId);
   if (!auth.allowed) {
     await interaction.reply({ content: `❌ ${auth.reason}`, flags: [MessageFlags.Ephemeral] });
     return;

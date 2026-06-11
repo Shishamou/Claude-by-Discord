@@ -21,7 +21,8 @@
 - **工具審批** — 未放行的工具操作透過 Discord 按鈕請求核准/拒絕
 - **互動式問答** — Claude 的 `AskUserQuestion` 以按鈕顯示，支援單選、多選、自訂回答
 - **檔案上傳** — @mention 與續問時可附加圖片、PDF、文字檔，Claude 直接讀取
-- **🛑 一鍵中斷** — Session 開始訊息附帶中斷按鈕，點擊確認後即停止任務
+- **🛑 一鍵中斷** — 每輪完成通知附帶中斷按鈕，點擊即停止並印出可供 `claude -r` 還原的 Session ID
+- **閒置自動中止** — Thread 超過 30 分鐘無新對話自動中止
 - **Token 追蹤** — 累計 Token 消耗與 USD 成本，`/status` 查看統計
 
 ## 前置需求
@@ -64,7 +65,8 @@ https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot%20application
 
 - 伺服器 ID → `DISCORD_GUILD_ID`
 - 頻道 ID → `channels.json` 的 `channelId`（見下方「頻道設定」）
-- 使用者 ID → `ALLOWED_USER_IDS`
+
+> 存取控制由 Discord 頻道權限把關：能在設定頻道發言的人即可操作 Bot，不再維護使用者白名單。
 
 ### 4. 環境變數
 
@@ -78,7 +80,6 @@ cp .env.example .env
 DISCORD_BOT_TOKEN=           # Discord Bot Token
 DISCORD_CLIENT_ID=           # Discord Application Client ID
 DISCORD_GUILD_ID=            # 伺服器 ID
-ALLOWED_USER_IDS=            # 允許操作的使用者 ID（多人以逗號分隔）
 ```
 
 以下為選填，有預設值：
@@ -166,7 +167,9 @@ pnpm dev
 
 Bot 會以該訊息建立 Thread 並啟動 Session：工作目錄取自頻道的 `path`，模型與推理深度依「頻道覆寫 → 全域預設」決定，頻道 `prompt` 會前置於首輪訊息。所有操作記錄都在 Thread 內即時顯示。可附加圖片、PDF 或文字檔。
 
-任務完成後不再發送統計摘要，Bot 會以一則純文字訊息通知：`✅ @你 任務完成，可在此 Thread 繼續對話。`
+任務完成後不再發送統計摘要，Bot 會以一則純文字訊息通知並附帶 🛑 中斷按鈕：`✅ @你 任務完成，可在此 Thread 繼續對話。`
+
+> Session 開始時不再發送「Session 開始」訊息；Skill 與 Bash 工具呼叫也不輸出，以降低 Thread 雜訊（其餘工具如 Edit、Write、Read 仍會顯示）。
 
 ### 續問
 
@@ -174,7 +177,9 @@ Claude 完成一輪後，直接在 Thread 中打字即可續問，Session 會自
 
 ### 中斷任務
 
-Session 開始的 Embed 訊息附帶 🛑 按鈕，點擊後出現確認/取消按鈕，確認即中斷任務並封存 Thread。
+每輪完成通知附帶 🛑 中斷按鈕，點擊即直接中止（不再二次確認）：Bot 會中斷查詢、印出 Session ID 與 `claude -r <id>` 還原指令，並封存 Thread。
+
+此外，Thread 超過 30 分鐘無新對話會自動中止，同樣印出還原指令後封存。
 
 ### 審批工具
 
@@ -199,9 +204,9 @@ Claude 使用 `AskUserQuestion` 提問時，Bot 顯示選項按鈕。支援單�
 
 三層防線：
 
-1. **Discord 授權** — 只有 `ALLOWED_USER_IDS` 的使用者可操作，且只在 `channels.json` 列出的頻道（及其 Thread）中生效
+1. **Discord 頻道權限** — 存取控制由 Discord 頻道權限把關：只在 `channels.json` 列出的頻道（及其 Thread）中生效，能在該頻道發言的人即可操作。請用 Discord 的頻道權限限制可見/可發言的成員
 2. **頻道白名單** — 工作目錄固定為頻道設定的 `path`，確保載入正確的專案設定
-3. **工具審批** — 專案 `.claude/settings.local.json` 定義自動放行的工具，其餘經 Discord 按鈕審批
+3. **工具審批** — 視 `DEFAULT_PERMISSION_MODE` 而定：`default`/`acceptEdits` 經 Discord 按鈕審批未放行的操作；`bypassPermissions` 則全部放行（適合受信任的私人頻道）
 
 > **注意**：`path` 限制的是 Claude 的起始工作目錄與載入的設定檔，不是檔案系統存取範圍。Claude 仍可透過絕對路徑存取其他位置。實際防線是各專案的 allow list 與 `canUseTool` 審批流程。
 
@@ -234,7 +239,7 @@ pnpm test:watch       # 測試監聽模式
 ## 限制
 
 - Bot 在本機執行，需保持終端機開啟
-- 只在 `channels.json` 設定的頻道運作，只有白名單使用者可操作
+- 只在 `channels.json` 設定的頻道運作，存取由 Discord 頻道權限把關
 - Session 狀態存在記憶體中，Bot 重啟後清空
 - Claude Code CLI 必須已登入
 

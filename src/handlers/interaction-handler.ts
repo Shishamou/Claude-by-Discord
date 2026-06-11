@@ -2,8 +2,7 @@ import { MessageFlags, type Interaction, type Client } from 'discord.js';
 import type { BotConfig } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import * as statusCmd from '../commands/status.js';
-import { executeStop, buildStopConfirmRow } from '../commands/stop.js';
-import { isUserAuthorized } from '../modules/permissions.js';
+import { executeEnd } from '../commands/stop.js';
 import type { UsageStore } from '../effects/usage-store.js';
 import {
   handleAskOptionClick,
@@ -22,6 +21,8 @@ export interface InteractionHandlerDeps {
 
 /**
  * 建立互動處理器，路由 Slash Commands、Button 與 Modal 互動至對應邏輯
+ *
+ * 存取控制改由 Discord 頻道權限把關，不再檢查使用者白名單。
  *
  * @param deps - 互動處理器所需的依賴
  * @returns 處理 Discord 互動事件的非同步函式
@@ -86,15 +87,9 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
         return;
       }
 
-      // 中斷請求 → 顯示確認/取消按鈕（discord-client.ts 已預先 deferReply）
-      // 🛑 按鈕掛在 Thread 內的公開訊息上，必須驗證使用者授權
-      if (customId.startsWith('stop_request:')) {
-        if (!isUserAuthorized(interaction.user.id, deps.config.allowedUserIds)) {
-          await interaction.editReply({ content: '❌ 你沒有權限執行此操作' });
-          return;
-        }
-
-        const threadId = customId.slice('stop_request:'.length);
+      // 中止任務（掛在完成通知上，不再二次確認；discord-client.ts 已預先 deferReply）
+      if (customId.startsWith('end:')) {
+        const threadId = customId.slice('end:'.length);
         const session = deps.store.getSession(threadId);
 
         if (!session) {
@@ -102,36 +97,8 @@ export function createInteractionHandler(deps: InteractionHandlerDeps) {
           return;
         }
 
-        await interaction.editReply({
-          content: '🛑 確定要中斷目前的任務嗎？',
-          components: [buildStopConfirmRow(threadId)],
-        });
-        return;
-      }
-
-      // 確認中斷（discord-client.ts 已預先 deferReply）
-      if (customId.startsWith('confirm_stop:')) {
-        if (!isUserAuthorized(interaction.user.id, deps.config.allowedUserIds)) {
-          await interaction.editReply({ content: '❌ 你沒有權限執行此操作' });
-          return;
-        }
-
-        const threadId = customId.slice('confirm_stop:'.length);
-        const session = deps.store.getSession(threadId);
-
-        if (!session) {
-          await interaction.editReply({ content: '⚠️ 此任務已結束' });
-          return;
-        }
-
-        await interaction.editReply({ content: '🛑 任務已中斷' });
-        await executeStop(threadId, deps.store, deps.client);
-        return;
-      }
-
-      // 取消中斷（discord-client.ts 已預先 deferReply）
-      if (customId.startsWith('cancel_stop:')) {
-        await interaction.editReply({ content: '✅ 已取消中斷' });
+        await interaction.editReply({ content: '🛑 正在中止…' });
+        await executeEnd(threadId, deps.store, deps.client);
         return;
       }
 

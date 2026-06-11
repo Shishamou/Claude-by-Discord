@@ -14,6 +14,9 @@ import { extractAssistantText, extractToolUse, extractResult } from '../modules/
 import { calculateTokenUsage } from '../modules/token-usage.js';
 import { truncate, formatForDiscord } from '../modules/formatters.js';
 
+/** 不輸出工具呼叫 Embed 的工具名稱（大小寫不敏感），用以降低 Thread 雜訊 */
+const SILENT_TOOL_EMBEDS = new Set(['skill', 'bash']);
+
 /** 串流處理器的依賴注入介面 */
 export interface StreamHandlerDeps {
   store: StateStore;
@@ -205,6 +208,9 @@ export async function handleSDKMessage(
             toolName: tool.toolName,
           });
         }
+
+        // Skill 與 Bash 工具呼叫不輸出 Embed（降低 Thread 雜訊），仍保留計數與 transcript
+        if (SILENT_TOOL_EMBEDS.has(tool.toolName.toLowerCase())) continue;
 
         const embed = buildToolUseEmbed(
           tool.toolName,

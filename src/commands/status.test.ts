@@ -21,7 +21,6 @@ import { buildStatusEmbed, buildGlobalStatusEmbed } from '../modules/embeds.js';
 const mockConfig: BotConfig = {
   discordToken: 'token',
   discordGuildId: 'guild',
-  allowedUserIds: ['user-1'],
   defaultModel: 'model',
   defaultEffort: null,
   defaultPermissionMode: 'default',
@@ -46,21 +45,6 @@ function makeInteraction(inThread: boolean, threadId = 'thread-1') {
 describe('status execute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('未授權使用者回覆錯誤', async () => {
-    const interaction = {
-      user: { id: 'bad' },
-      channelId: 'channel-1',
-      channel: { isThread: () => false, parentId: null },
-      reply: vi.fn().mockResolvedValue(undefined),
-    } as unknown;
-    const store = new StateStore();
-    const usageStore = new UsageStore();
-    await execute(interaction as never, mockConfig, store, usageStore);
-    expect((interaction as Record<string, unknown>).reply).toHaveBeenCalledWith(
-      expect.objectContaining({ flags: [MessageFlags.Ephemeral] }),
-    );
   });
 
   it('未設定的頻道回覆錯誤', async () => {

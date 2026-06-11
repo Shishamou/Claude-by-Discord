@@ -1,7 +1,6 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type APIEmbed } from 'discord.js';
+import type { APIEmbed } from 'discord.js';
 import type {
   AskState,
-  EffortLevel,
   SessionState,
 } from '../types.js';
 import type { GlobalUsageStats, SessionUsageRecord } from '../effects/usage-store.js';
@@ -211,95 +210,6 @@ export function buildStatusEmbed(
     author: { name: `📋 Session 狀態 — ${statusName}` },
     title: truncate(session.promptText, 100),
     fields,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-// ─── Session 開始 Embed ─────────────────────────────
-
-/**
- * 建構 Session 開始 Embed
- * @param promptText - 使用者的 Prompt 文字
- * @param cwd - 工作目錄
- * @param model - 使用的模型名稱
- * @param effort - 選填的推理深度（null/未設定時不顯示）
- * @returns Session 開始 Embed
- */
-export function buildSessionStartEmbed(
-  promptText: string,
-  cwd: string,
-  model: string,
-  effort?: EffortLevel | null,
-): APIEmbed {
-  const fields: APIEmbed['fields'] = [
-    { name: '工作目錄', value: `\`${cwd}\``, inline: true },
-    { name: '模型', value: model, inline: true },
-  ];
-
-  if (effort) {
-    fields.push({ name: 'Effort', value: effort, inline: true });
-  }
-
-  return {
-    color: COLORS.SessionStart,
-    author: { name: '🚀 Session 開始' },
-    title: truncate(promptText, 100),
-    fields,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-// ─── 中斷請求按鈕 ───────────────────────────────────
-
-/**
- * 建構 Session 開始訊息附帶的 🛑 中斷請求按鈕列
- *
- * 點擊後由 interaction-handler 顯示既有的確認／取消按鈕
- * （`confirm_stop:<threadId>` / `cancel_stop:<threadId>`）。
- *
- * @param threadId - 對應的 Thread ID，用於按鈕 customId 綁定
- * @returns 中斷請求按鈕列
- */
-export function buildStopButtonRow(threadId: string): ActionRowBuilder<ButtonBuilder> {
-  const stop = new ButtonBuilder()
-    .setCustomId(`stop_request:${threadId}`)
-    .setLabel('中斷')
-    .setStyle(ButtonStyle.Danger)
-    .setEmoji('🛑');
-
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(stop);
-}
-
-// ─── 中斷確認 Embed ─────────────────────────────────
-
-/**
- * 建構中斷確認 Embed
- * @param stats - 工具使用統計（次數與各工具計數）
- * @param durationMs - 執行時間（毫秒）
- * @returns 中斷確認 Embed
- */
-export function buildStopConfirmEmbed(
-  stats: { toolCount: number; tools: Record<string, number> },
-  durationMs: number,
-): APIEmbed {
-  const toolList = Object.entries(stats.tools)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([name, count]) => `${TOOL_EMOJI[name] || '🔧'} ${name}: **${count}**`)
-    .join('\n');
-
-  return {
-    color: COLORS.Error,
-    author: { name: '🛑 已中斷' },
-    title: '任務已被手動中斷',
-    fields: [
-      { name: '執行時間', value: formatDuration(durationMs), inline: true },
-      {
-        name: `工具統計（共 ${stats.toolCount} 次）`,
-        value: toolList || '無',
-        inline: false,
-      },
-    ],
     timestamp: new Date().toISOString(),
   };
 }

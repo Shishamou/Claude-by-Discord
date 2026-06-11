@@ -9,34 +9,12 @@ describe('parseConfig', () => {
   const minimal = {
     DISCORD_BOT_TOKEN: 'token',
     DISCORD_GUILD_ID: 'guild',
-    ALLOWED_USER_IDS: 'user1',
   };
 
   it('解析基本環境變數', () => {
     const config = parseConfig(minimal);
     expect(config.discordToken).toBe('token');
     expect(config.discordGuildId).toBe('guild');
-    expect(config.allowedUserIds).toEqual(['user1']);
-  });
-
-  it('多個使用者 ID 以逗號分隔', () => {
-    const config = parseConfig({ ...minimal, ALLOWED_USER_IDS: 'a, b, c' });
-    expect(config.allowedUserIds).toEqual(['a', 'b', 'c']);
-  });
-
-  it('尾部逗號不產生空元素', () => {
-    const config = parseConfig({ ...minimal, ALLOWED_USER_IDS: 'a,b,' });
-    expect(config.allowedUserIds).toEqual(['a', 'b']);
-  });
-
-  it('空字串 ALLOWED_USER_IDS 回傳空陣列', () => {
-    const config = parseConfig({ ...minimal, ALLOWED_USER_IDS: '' });
-    expect(config.allowedUserIds).toEqual([]);
-  });
-
-  it('未設定 ALLOWED_USER_IDS 回傳空陣列', () => {
-    const config = parseConfig({ ...minimal, ALLOWED_USER_IDS: undefined });
-    expect(config.allowedUserIds).toEqual([]);
   });
 
   it('預設值正確', () => {
@@ -105,7 +83,6 @@ describe('validateConfig', () => {
       ...parseConfig({
         DISCORD_BOT_TOKEN: 'token',
         DISCORD_GUILD_ID: 'guild',
-        ALLOWED_USER_IDS: 'user1',
       }),
       channels,
       ...overrides,
@@ -154,10 +131,10 @@ describe('validateConfig', () => {
     expect(validateConfig(makeConfig({ defaultEffort: 'max' }))).toEqual([]);
   });
 
-  it('所有欄位缺少時產生 4 個錯誤', () => {
+  it('所有欄位缺少時產生 3 個錯誤', () => {
     const config = { ...parseConfig({}), channels: [] };
     const errors = validateConfig(config);
-    expect(errors.length).toBe(4);
+    expect(errors.length).toBe(3);
   });
 });
 

@@ -267,7 +267,7 @@ describe('handleSDKMessage', () => {
           message: {
             content: [
               { type: 'text', text: 'Thinking...' },
-              { type: 'tool_use', name: 'Bash', input: { command: 'ls' }, id: 'tu2' },
+              { type: 'tool_use', name: 'Edit', input: { file_path: '/a.ts' }, id: 'tu2' },
             ],
           },
         } as unknown as SDKMessage,
@@ -278,6 +278,32 @@ describe('handleSDKMessage', () => {
       // 純文字 1 次 + 工具 embed 1 次
       expect(sendTextInThread).toHaveBeenCalledTimes(1);
       expect(sendInThread).toHaveBeenCalledTimes(1);
+    });
+
+    it('Skill 與 Bash 工具不發送 embed，但仍計數', async () => {
+      const deps = makeDeps(store, usageStore);
+      const state = makeStreamState();
+
+      await handleSDKMessage(
+        {
+          type: 'assistant',
+          message: {
+            content: [
+              { type: 'tool_use', name: 'Bash', input: { command: 'ls' }, id: 'tu3' },
+              { type: 'tool_use', name: 'Skill', input: { name: 'foo' }, id: 'tu4' },
+            ],
+          },
+        } as unknown as SDKMessage,
+        deps,
+        state,
+      );
+
+      const session = store.getSession('t1');
+      expect(session?.toolCount).toBe(2);
+      expect(session?.tools['Bash']).toBe(1);
+      expect(session?.tools['Skill']).toBe(1);
+      // 兩者都不發送 embed
+      expect(sendInThread).not.toHaveBeenCalled();
     });
   });
 

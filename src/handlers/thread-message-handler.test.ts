@@ -9,9 +9,6 @@ vi.mock('../modules/embeds.js', () => ({
 vi.mock('../effects/discord-sender.js', () => ({
   sendInThread: vi.fn().mockResolvedValue({ id: 'msg-1' }),
 }));
-vi.mock('../modules/permissions.js', () => ({
-  isUserAuthorized: vi.fn().mockReturnValue(true),
-}));
 
 import type { Message, Client } from 'discord.js';
 import type { BotConfig, SessionState } from '../types.js';
@@ -20,7 +17,6 @@ import { StateStore } from '../effects/state-store.js';
 import { classifyAttachment, createThreadMessageHandler } from './thread-message-handler.js';
 import { buildFollowUpEmbed } from '../modules/embeds.js';
 import { sendInThread } from '../effects/discord-sender.js';
-import { isUserAuthorized } from '../modules/permissions.js';
 
 describe('classifyAttachment', () => {
   // 圖片類型
@@ -169,7 +165,6 @@ function makeDeps(store: StateStore, overrides?: Partial<ThreadMessageHandlerDep
     config: {
       discordToken: 'token',
       discordGuildId: 'guild-1',
-      allowedUserIds: ['u1'],
       defaultModel: 'claude-sonnet',
       defaultEffort: null,
       defaultPermissionMode: 'default',
@@ -191,7 +186,6 @@ describe('createThreadMessageHandler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isUserAuthorized).mockReturnValue(true);
     vi.unstubAllGlobals();
     store = new StateStore();
   });
@@ -239,18 +233,6 @@ describe('createThreadMessageHandler', () => {
     store.setSession('thread-1', makeSession('thread-1', { status: 'running' }));
     const deps = makeDeps(store);
     const handler = createThreadMessageHandler(deps);
-    const message = makeMessage();
-
-    await handler(message);
-
-    expect(deps.startClaudeQuery).not.toHaveBeenCalled();
-  });
-
-  it('未授權使用者時忽略', async () => {
-    store.setSession('thread-1', makeSession('thread-1'));
-    const deps = makeDeps(store);
-    const handler = createThreadMessageHandler(deps);
-    vi.mocked(isUserAuthorized).mockReturnValue(false);
     const message = makeMessage();
 
     await handler(message);

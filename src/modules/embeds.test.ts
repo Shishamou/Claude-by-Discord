@@ -6,9 +6,6 @@ import {
   buildStreamingTextEmbed,
   buildErrorEmbed,
   buildStatusEmbed,
-  buildSessionStartEmbed,
-  buildStopButtonRow,
-  buildStopConfirmEmbed,
   buildNotificationEmbed,
   buildFollowUpEmbed,
   buildMultiStatusEmbed,
@@ -167,59 +164,6 @@ describe('buildStatusEmbed', () => {
       durationMs: 0,
     });
     expect(embed.fields?.some((f) => f.name.includes('累計 Token'))).toBe(false);
-  });
-});
-
-describe('buildSessionStartEmbed', () => {
-  it('顯示 prompt 和設定', () => {
-    const embed = buildSessionStartEmbed('做些什麼', '/cwd', 'model');
-    expect(embed.title).toContain('做些什麼');
-    expect(embed.fields?.some((f) => f.value.includes('/cwd'))).toBe(true);
-  });
-
-  it('超長 prompt 被截斷', () => {
-    const embed = buildSessionStartEmbed('a'.repeat(200), '/cwd', 'model');
-    expect(embed.title!.length).toBeLessThanOrEqual(101);
-  });
-
-  it('有 effort 時顯示 Effort 欄位', () => {
-    const embed = buildSessionStartEmbed('做些什麼', '/cwd', 'model', 'high');
-    const effortField = embed.fields?.find((f) => f.name === 'Effort');
-    expect(effortField?.value).toBe('high');
-  });
-
-  it('effort 為 null 時不顯示 Effort 欄位', () => {
-    const embed = buildSessionStartEmbed('做些什麼', '/cwd', 'model', null);
-    expect(embed.fields?.some((f) => f.name === 'Effort')).toBe(false);
-  });
-
-  it('未傳 effort 時不顯示 Effort 欄位', () => {
-    const embed = buildSessionStartEmbed('做些什麼', '/cwd', 'model');
-    expect(embed.fields?.some((f) => f.name === 'Effort')).toBe(false);
-  });
-});
-
-describe('buildStopButtonRow', () => {
-  it('customId 綁定 threadId', () => {
-    const row = buildStopButtonRow('thread-123');
-    const json = row.toJSON();
-    expect(json.components).toHaveLength(1);
-    expect(json.components[0]).toMatchObject({ custom_id: 'stop_request:thread-123' });
-  });
-
-  it('使用 Danger 樣式與 🛑 emoji', () => {
-    const row = buildStopButtonRow('t1');
-    const button = row.toJSON().components[0] as { style: number; emoji?: { name?: string } };
-    expect(button.style).toBe(4); // ButtonStyle.Danger
-    expect(button.emoji?.name).toBe('🛑');
-  });
-});
-
-describe('buildStopConfirmEmbed', () => {
-  it('顯示中斷結果', () => {
-    const embed = buildStopConfirmEmbed({ toolCount: 2, tools: { Bash: 2 } }, 5000);
-    expect(embed.author?.name).toContain('已中斷');
-    expect(embed.fields?.some((f) => f.value.includes('5s'))).toBe(true);
   });
 });
 

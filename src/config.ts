@@ -20,7 +20,6 @@ export function parseConfig(env: Record<string, string | undefined>): BotConfig 
   return {
     discordToken: env.DISCORD_BOT_TOKEN ?? '',
     discordGuildId: env.DISCORD_GUILD_ID ?? '',
-    allowedUserIds: parseCommaSeparated(env.ALLOWED_USER_IDS),
     defaultModel: env.DEFAULT_MODEL ?? 'claude-opus-4-6',
     // 直接保留原始字串（轉型），交由 validateConfig 驗證是否為合法值
     defaultEffort: env.DEFAULT_EFFORT ? (env.DEFAULT_EFFORT as EffortLevel) : null,
@@ -47,9 +46,6 @@ export function validateConfig(config: BotConfig): string[] {
   if (!config.discordGuildId) {
     errors.push('DISCORD_GUILD_ID 未設定');
   }
-  if (config.allowedUserIds.length === 0) {
-    errors.push('ALLOWED_USER_IDS 未設定（至少需要一個允許的使用者 ID）');
-  }
   if (config.channels.length === 0) {
     errors.push('channels.json 未設定或為空（至少需要一個頻道設定）');
   }
@@ -69,14 +65,6 @@ export function validateConfig(config: BotConfig): string[] {
   }
 
   return errors;
-}
-
-function parseCommaSeparated(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
 }
 
 function safeParseInt(value: string | undefined, fallback: number): number {

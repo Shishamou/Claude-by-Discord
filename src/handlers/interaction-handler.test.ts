@@ -9,8 +9,7 @@ vi.mock('../commands/status.js', () => ({
   execute: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../commands/stop.js', () => ({
-  executeStop: vi.fn().mockResolvedValue(undefined),
-  buildStopConfirmRow: vi.fn().mockReturnValue({ type: 1, components: [] }),
+  executeEnd: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./ask-handler.js', () => ({
   handleAskOptionClick: vi.fn().mockResolvedValue(undefined),
@@ -20,13 +19,12 @@ vi.mock('./ask-handler.js', () => ({
 }));
 
 import * as statusCmd from '../commands/status.js';
-import { executeStop, buildStopConfirmRow } from '../commands/stop.js';
+import { executeEnd } from '../commands/stop.js';
 import { handleAskOptionClick, handleAskSubmit, handleAskOther, handleAskModalSubmit } from './ask-handler.js';
 
 const mockConfig: BotConfig = {
   discordToken: 'token',
   discordGuildId: 'guild',
-  allowedUserIds: ['user1'],
   defaultModel: 'model',
   defaultEffort: null,
   defaultPermissionMode: 'default',
@@ -77,13 +75,13 @@ function makeSlashInteraction(commandName: string) {
   } as unknown;
 }
 
-function makeButtonInteraction(customId: string, userId = 'user1') {
+function makeButtonInteraction(customId: string) {
   return {
     isChatInputCommand: () => false,
     isButton: () => true,
     isModalSubmit: () => false,
     customId,
-    user: { id: userId },
+    user: { id: 'user1' },
     reply: vi.fn().mockResolvedValue(undefined),
     editReply: vi.fn().mockResolvedValue(undefined),
   } as unknown;
@@ -200,99 +198,30 @@ describe('createInteractionHandler', () => {
       );
     });
 
-    it('stop_request 顯示確認/取消按鈕', async () => {
+    it('end 直接中止並呼叫 executeEnd', async () => {
       const store = new StateStore();
       store.setSession('t1', makeSession('t1'));
 
       const deps = makeDeps(store);
       const handler = createInteractionHandler(deps);
-      const interaction = makeButtonInteraction('stop_request:t1');
+      const interaction = makeButtonInteraction('end:t1');
       await handler(interaction as never);
 
-      expect(buildStopConfirmRow).toHaveBeenCalledWith('t1');
       expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: expect.stringContaining('確定要中斷'),
-          components: expect.any(Array),
-        }),
+        expect.objectContaining({ content: '🛑 正在中止…' }),
       );
+      expect(executeEnd).toHaveBeenCalledWith('t1', store, deps.client);
     });
 
-    it('stop_request 無 session 時回覆已結束', async () => {
+    it('end 無 session 時回覆已結束', async () => {
       const deps = makeDeps();
       const handler = createInteractionHandler(deps);
-      const interaction = makeButtonInteraction('stop_request:t1');
-      await handler(interaction as never);
-      expect(buildStopConfirmRow).not.toHaveBeenCalled();
-      expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
-        expect.objectContaining({ content: '⚠️ 此任務已結束' }),
-      );
-    });
-
-    it('confirm_stop 執行中斷', async () => {
-      const store = new StateStore();
-      store.setSession('t1', makeSession('t1'));
-
-      const deps = makeDeps(store);
-      const handler = createInteractionHandler(deps);
-      const interaction = makeButtonInteraction('confirm_stop:t1');
-      await handler(interaction as never);
-
-      expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
-        expect.objectContaining({ content: '🛑 任務已中斷' }),
-      );
-      expect(executeStop).toHaveBeenCalledWith('t1', store, deps.client);
-    });
-
-    it('confirm_stop 無 session 時回覆已結束', async () => {
-      const deps = makeDeps();
-      const handler = createInteractionHandler(deps);
-      const interaction = makeButtonInteraction('confirm_stop:t1');
+      const interaction = makeButtonInteraction('end:t1');
       await handler(interaction as never);
       expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
         expect.objectContaining({ content: '⚠️ 此任務已結束' }),
       );
-      expect(executeStop).not.toHaveBeenCalled();
-    });
-
-    it('stop_request 未授權使用者被拒絕', async () => {
-      const store = new StateStore();
-      store.setSession('t1', makeSession('t1'));
-
-      const deps = makeDeps(store);
-      const handler = createInteractionHandler(deps);
-      const interaction = makeButtonInteraction('stop_request:t1', 'intruder');
-      await handler(interaction as never);
-
-      expect(buildStopConfirmRow).not.toHaveBeenCalled();
-      expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
-        expect.objectContaining({ content: '❌ 你沒有權限執行此操作' }),
-      );
-    });
-
-    it('confirm_stop 未授權使用者被拒絕', async () => {
-      const store = new StateStore();
-      store.setSession('t1', makeSession('t1'));
-
-      const deps = makeDeps(store);
-      const handler = createInteractionHandler(deps);
-      const interaction = makeButtonInteraction('confirm_stop:t1', 'intruder');
-      await handler(interaction as never);
-
-      expect(executeStop).not.toHaveBeenCalled();
-      expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
-        expect.objectContaining({ content: '❌ 你沒有權限執行此操作' }),
-      );
-    });
-
-    it('cancel_stop 回覆已取消', async () => {
-      const deps = makeDeps();
-      const handler = createInteractionHandler(deps);
-      const interaction = makeButtonInteraction('cancel_stop:t1');
-      await handler(interaction as never);
-      expect((interaction as Record<string, unknown>).editReply).toHaveBeenCalledWith(
-        expect.objectContaining({ content: '✅ 已取消中斷' }),
-      );
+      expect(executeEnd).not.toHaveBeenCalled();
     });
 
     it('ask 按鈕路由到 handleAskOptionClick', async () => {

@@ -33,7 +33,6 @@ export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | '
 export interface BotConfig {
   discordToken: string;
   discordGuildId: string;
-  allowedUserIds: string[];
   defaultModel: string;
   defaultEffort: EffortLevel | null;
   defaultPermissionMode: PermissionMode;

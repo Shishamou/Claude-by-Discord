@@ -2,7 +2,6 @@ import type { Message, Client } from 'discord.js';
 import type { BotConfig, SessionState, FileAttachment } from '../types.js';
 import type { StateStore } from '../effects/state-store.js';
 import { logger } from '../effects/logger.js';
-import { isUserAuthorized } from '../modules/permissions.js';
 
 const log = logger.child({ module: 'Thread' });
 import { buildFollowUpEmbed } from '../modules/embeds.js';
@@ -112,9 +111,6 @@ export function createThreadMessageHandler(deps: ThreadMessageHandlerDeps) {
 
     // 只在 waiting_input 狀態接受續問
     if (session.status !== 'waiting_input') return;
-
-    // 檢查使用者授權
-    if (!isUserAuthorized(message.author.id, deps.config.allowedUserIds)) return;
 
     // 取得續問文字與檔案
     const followUpText = message.content.trim();
