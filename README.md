@@ -150,12 +150,34 @@ Bot 只回應 `channels.json` 中列出的頻道（及其 Thread）。每個專�
 ## 啟動
 
 ```bash
-# 註冊 Slash Commands（首次或指令有變動時執行）
+# 註冊 Slash Commands（首次或指令有變動時執行；會清掉 Discord 端已移除的舊指令）
 pnpm deploy-commands
 
-# 啟動 Bot
+# 開發模式（tsx 直接執行 TypeScript，改code後 Ctrl+C 重跑即可）
 pnpm dev
+
+# 正式執行（先編譯再以 node 執行 dist/）
+pnpm build
+pnpm start
 ```
+
+> 沒有安裝 pnpm 的機器（如測試機）可用 Node.js 自帶的 corepack 代跑：`corepack pnpm <指令>`，版本會依 `package.json` 的 `packageManager` 自動鎖定。
+
+### 更新後重啟
+
+拉了新版程式碼之後：
+
+```bash
+git pull                  # 或 git fetch && git reset --hard origin/<branch>
+pnpm install              # 依賴有變動時
+pnpm build                # 重新編譯 dist/
+pnpm deploy-commands      # 僅 Slash 指令有增減時需要
+pnpm start                # 重新啟動
+```
+
+停止 Bot 直接 `Ctrl+C`（或對程序送 SIGTERM）即可——會優雅關閉：中斷所有活躍 Session 後才退出。注意 Session 狀態存在記憶體，重啟後進行中的 Thread 會在下次啟動時被當作孤兒 Thread 封存。
+
+> 同一個 Bot Token 同時只能跑一個實例，多台機器同時啟動會重複回應訊息。
 
 ## 使用方式
 
